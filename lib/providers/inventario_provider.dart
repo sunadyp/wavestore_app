@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../models/producto.dart';
 import '../models/venta.dart';
 import '../data/storage_service.dart';
@@ -9,14 +10,13 @@ class InventarioProvider extends ChangeNotifier {
   double _dineroEnCaja = 0.0;
   String _filtro = '';
   
-  // Instancia del servicio de almacenamiento
   final StorageService _storage = StorageService();
 
   InventarioProvider() {
     _cargarDesdeDisco();
   }
 
-  // GETTERS
+  // --- GETTERS ---
   List<Producto> get productos {
     if (_filtro.isEmpty) return _productos;
     return _productos.where((p) => p.nombre.toLowerCase().contains(_filtro.toLowerCase())).toList();
@@ -24,19 +24,50 @@ class InventarioProvider extends ChangeNotifier {
   List<Venta> get ventas => _ventas;
   double get dineroEnCaja => _dineroEnCaja;
   
-  // FINANZAS (Lógica de negocio pura)
   double get capitalInvertido => _productos.fold(0, (sum, item) => sum + (item.costo * item.cantidad));
   double get dineroPosible => _productos.fold(0, (sum, item) => sum + (item.precioVenta * item.cantidad));
   double get gananciaPotencial => dineroPosible - capitalInvertido;
 
-  double get ventasSemana {
-    final sieteDiasAtras = DateTime.now().subtract(const Duration(days: 7));
-    return _ventas
-        .where((v) => v.fecha.isAfter(sieteDiasAtras))
-        .fold(0.0, (sum, v) => sum + v.total);
+  // --- LÓGICA DE FILTRADO POR SEMANAS ---
+
+  /// Filtra ventas por un rango exacto
+  List<Venta> obtenerVentasPorRango(DateTime inicio, DateTime fin) {
+    final inicioDia = DateTime(inicio.year, inicio.month, inicio.day, 0, 0, 0);
+    final finDelDia = DateTime(fin.year, fin.month, fin.day, 23, 59, 59);
+    return _ventas.where((v) => v.fecha.isAfter(inicioDia) && v.fecha.isBefore(finDelDia)).toList();
   }
 
-  // ACCIONES
+  /// Genera las semanas del mes actual (Estén vacías o no)
+  List<Map<String, dynamic>> obtenerSemanasMesActual() {
+    List<Map<String, dynamic>> semanas = [];
+    DateTime ahora = DateTime.now();
+    
+    // 1. Buscamos el primer día del mes
+    DateTime primeroMes = DateTime(ahora.year, ahora.month, 1);
+    
+    // 2. Retrocedemos al Lunes de esa primera semana
+    DateTime lunes = primeroMes.subtract(Duration(days: primeroMes.weekday - 1));
+
+    // 3. Generamos 5 semanas (suficiente para cubrir cualquier mes)
+    for (int i = 0; i < 6; i++) {
+      DateTime inicioSemana = lunes.add(Duration(days: i * 7));
+      DateTime finSemana = inicioSemana.add(const Duration(days: 6));
+      
+      // Creamos un ID único de texto para que el Dropdown no falle
+      String id = "${inicioSemana.day}-${inicioSemana.month}-${inicioSemana.year}";
+      String label = "${DateFormat('dd MMM').format(inicioSemana)} - ${DateFormat('dd MMM').format(finSemana)}";
+
+      semanas.add({
+        'id': id, 
+        'label': label,
+        'inicio': inicioSemana,
+        'fin': finSemana,
+      });
+    }
+    return semanas;
+  }
+
+  // --- ACCIONES ---
   void filtrar(String texto) {
     _filtro = texto;
     notifyListeners();
@@ -82,16 +113,13 @@ class InventarioProvider extends ChangeNotifier {
         fecha: DateTime.now(),
       );
 
-      // Usamos copyWith del modelo (que agregamos antes)
       _productos[index] = prod.copyWith(cantidad: prod.cantidad - cantidadVendida);
-      
       _ventas.add(nuevaVenta);
       _dineroEnCaja += nuevaVenta.total;
       _notificarYGuardar();
     }
   }
 
-  // CARGA INICIAL
   Future<void> _cargarDesdeDisco() async {
     _productos = await _storage.cargarProductos();
     _ventas = await _storage.cargarVentas();
