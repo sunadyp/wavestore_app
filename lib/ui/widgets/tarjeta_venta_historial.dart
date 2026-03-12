@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/venta.dart';
+import '../../models/venta.dart';
 
 class TarjetaVentaHistorial extends StatelessWidget {
   final Venta venta;

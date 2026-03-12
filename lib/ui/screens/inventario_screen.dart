@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/inventario_provider.dart';
+import '../../providers/inventario_provider.dart';
 import '../widgets/item_producto.dart';
 import '../widgets/formulario_producto.dart';
 

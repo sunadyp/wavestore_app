@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'screens/dashboard_screen.dart';
-import 'screens/inventario_screen.dart';
-import 'screens/finanzas_screen.dart'; // 1. IMPORTA LA NUEVA PANTALLA
 import 'package:provider/provider.dart';
 import 'providers/inventario_provider.dart';
+import 'ui/screens/dashboard_screen.dart';
+import 'ui/screens/inventario_screen.dart';
+import 'ui/screens/finanzas_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(
     MultiProvider(
       providers: [
@@ -21,15 +22,15 @@ class WaveStoreApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Definimos los colores aquí para que toda la app los herede
     const Color rosaPrincipal = Color(0xFFF06292);
     const Color rosaAcento = Color(0xFFF8BBD0);
-    const Color fondo = Color(0xFFFAFAFA);
 
     return MaterialApp(
       title: 'WaveStore',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        scaffoldBackgroundColor: fondo,
+        useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
           seedColor: rosaPrincipal,
           primary: rosaPrincipal,
@@ -38,16 +39,10 @@ class WaveStoreApp extends StatelessWidget {
         appBarTheme: const AppBarTheme(
           backgroundColor: rosaPrincipal,
           foregroundColor: Colors.white,
-          elevation: 0,
           centerTitle: true,
-          titleTextStyle: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
-          ),
         ),
-        useMaterial3: true,
       ),
+      // Si el sistema de rutas te dio problemas, volvamos a lo seguro:
       home: const NavegacionPrincipal(),
     );
   }
@@ -63,43 +58,30 @@ class NavegacionPrincipal extends StatefulWidget {
 class _NavegacionPrincipalState extends State<NavegacionPrincipal> {
   int _indiceActual = 0;
 
-  // 2. AÑADE LA PANTALLA A LA LISTA
   final List<Widget> _pantallas = [
     const DashboardScreen(),
     const InventarioScreen(),
-    const FinanzasScreen(), // <-- Agregada aquí
+    const FinanzasScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // El AppBar se queda aquí para que sea persistente
       appBar: AppBar(
-        title: const Text('W A V E  S T O R E'),
+        title: const Text('W A V E  S T O R E', 
+          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2)),
       ),
       body: _pantallas[_indiceActual],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _indiceActual,
-        onTap: (index) {
-          setState(() {
-            _indiceActual = index;
-          });
-        },
+        onTap: (index) => setState(() => _indiceActual = index),
         selectedItemColor: Theme.of(context).colorScheme.primary,
         unselectedItemColor: Colors.grey,
-        // 3. AÑADE EL ICONO EN EL MENÚ
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.analytics_rounded),
-            label: 'Resumen',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.inventory_2_rounded),
-            label: 'Inventario',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.receipt_long_rounded),
-            label: 'Historial',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'Resumen'),
+          BottomNavigationBarItem(icon: Icon(Icons.inventory_2), label: 'Inventario'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Historial'),
         ],
       ),
     );

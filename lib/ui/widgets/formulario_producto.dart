@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/inventario_provider.dart';
-import '../models/producto.dart';
+import '../../providers/inventario_provider.dart';
+import '../../models/producto.dart';
 
 class FormularioProducto extends StatefulWidget {
   final Producto? productoActual; // Puede recibir un producto o ser nulo

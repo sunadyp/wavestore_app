@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/inventario_provider.dart';
+import '../../providers/inventario_provider.dart';
 import '../widgets/resumen_balance_card.dart';
 import '../widgets/tarjeta_venta_historial.dart';
 
