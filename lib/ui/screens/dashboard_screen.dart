@@ -14,15 +14,15 @@ class DashboardScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
-        const Text('Resumen Financiero', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        const Text('Dashboard', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         TarjetaFinanciera(
-          titulo: 'Dinero en Caja', valor: '\$${provider.dineroEnCaja.toStringAsFixed(2)}',
+          titulo: 'Saldo', valor: '\$${provider.dineroEnCaja.toStringAsFixed(2)}',
           icono: Icons.account_balance_wallet, colorFondo: tema.primary, colorTexto: Colors.white,
         ),
         const SizedBox(height: 12),
         TarjetaFinanciera(
-          titulo: 'Venta Potencial', valor: '\$${provider.dineroPosible.toStringAsFixed(2)}',
+          titulo: 'Total de Venta', valor: '\$${provider.dineroPosible.toStringAsFixed(2)}',
           icono: Icons.trending_up, colorFondo: Colors.white, colorTexto: Colors.black87,
         ),
         const SizedBox(height: 12),
@@ -34,7 +34,7 @@ class DashboardScreen extends StatelessWidget {
             )),
             const SizedBox(width: 12),
             Expanded(child: TarjetaFinanciera(
-              titulo: 'Ganancia', valor: '\$${provider.gananciaPotencial.toStringAsFixed(2)}',
+              titulo: 'Utilidad', valor: '\$${provider.gananciaPotencial.toStringAsFixed(2)}',
               icono: Icons.savings, colorFondo: tema.secondary, colorTexto: Colors.black87, esPequena: true,
             )),
           ],

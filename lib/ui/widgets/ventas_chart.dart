@@ -1,6 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
-import 'package:flutter/material.dart'; // <--- Asegúrate de tener esta importación
-import '/models/venta.dart';
+import 'package:flutter/material.dart';
+import '../../models/venta.dart';
 
 class VentasChart extends StatelessWidget {
   final List<Venta> ventasSemana;
@@ -10,7 +10,7 @@ class VentasChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 180, // Bajamos un poco la altura para que respire
+      height: 180,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: BarChart(
         BarChartData(
@@ -41,10 +41,9 @@ class VentasChart extends StatelessWidget {
   List<BarChartGroupData> _generarGrupos() {
     List<double> montosPorDia = List.filled(7, 0.0);
     for (var venta in ventasSemana) {
-      // Ajuste: DateTime.weekday va de 1 (lunes) a 7 (domingo)
       int index = venta.fecha.weekday - 1;
       if (index >= 0 && index < 7) {
-        montosPorDia[index] += venta.total;
+        montosPorDia[index] += venta.totalFinal; // <--- CAMBIO AQUÍ
       }
     }
 
@@ -54,7 +53,7 @@ class VentasChart extends StatelessWidget {
         barRods: [
           BarChartRodData(
             toY: montosPorDia[i],
-            color: Colors.pinkAccent.shade100, // Color suave para que no canse
+            color: Colors.pinkAccent.shade100,
             width: 16,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
           ),
@@ -70,10 +69,8 @@ class VentasChart extends StatelessWidget {
       fontSize: 12
     );
     
-    // Lista de días
     const dias = ['L', 'Ma', 'Mi', 'J', 'V', 'S', 'D'];
     
-    // VALIDACIÓN CRÍTICA: Solo intentamos leer si el valor es un índice válido
     int index = value.toInt();
     String text = (index >= 0 && index < dias.length) ? dias[index] : '';
 
@@ -88,12 +85,11 @@ class VentasChart extends StatelessWidget {
     List<double> montos = List.filled(7, 0.0);
     for (var v in ventasSemana) {
       int idx = v.fecha.weekday - 1;
-      if (idx >= 0 && idx < 7) montos[idx] += v.total;
+      if (idx >= 0 && idx < 7) montos[idx] += v.totalFinal; // <--- CAMBIO AQUÍ
     }
     for (var m in montos) {
       if (m > maxMonto) maxMonto = m;
     }
-    // Si no hay ventas, ponemos 100 de tope por defecto, si hay, le damos margen arriba
     return maxMonto == 0 ? 100 : maxMonto * 1.2;
   }
 }

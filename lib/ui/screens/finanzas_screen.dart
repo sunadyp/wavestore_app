@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/inventario_provider.dart';
-import '../../models/venta.dart';
 import '../widgets/resumen_balance_card.dart';
 import '../widgets/tarjeta_venta_historial.dart';
-import '../widgets/ventas_chart.dart'; // Importación de la gráfica
+import '../widgets/ventas_chart.dart';
 
 class FinanzasScreen extends StatefulWidget {
   const FinanzasScreen({super.key});
@@ -14,17 +13,14 @@ class FinanzasScreen extends StatefulWidget {
 }
 
 class _FinanzasScreenState extends State<FinanzasScreen> {
-  // Guardamos solo el ID (String) para evitar errores de comparación de objetos
   String? _semanaSeleccionadaId;
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<InventarioProvider>();
     
-    // Obtenemos todas las semanas del mes (vacías o no)
     final semanasDisponibles = provider.obtenerSemanasMesActual();
 
-    // 1. Selección inicial inteligente (Semana Actual)
     if (_semanaSeleccionadaId == null && semanasDisponibles.isNotEmpty) {
       final ahora = DateTime.now();
       
@@ -41,30 +37,25 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
       _semanaSeleccionadaId = semanaActual['id'];
     }
 
-    // 2. Buscamos los datos completos de la semana seleccionada usando el ID
     final semanaActual = semanasDisponibles.firstWhere(
       (s) => s['id'] == _semanaSeleccionadaId,
       orElse: () => semanasDisponibles.first,
     );
 
-    // 3. Filtramos las ventas para la lista y la gráfica
     final ventasAMostrar = provider.obtenerVentasPorRango(
       semanaActual['inicio'],
       semanaActual['fin'],
     ).reversed.toList();
 
-    // 4. Calculamos el total de la semana para la tarjeta superior
-    final double totalSeleccionado = ventasAMostrar.fold(0, (sum, v) => sum + v.total);
+    // <--- CAMBIO AQUÍ (v.totalFinal) --->
+    final double totalSeleccionado = ventasAMostrar.fold(0, (sum, v) => sum + v.totalFinal);
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // Muestra el total dinámico según la semana elegida
           ResumenBalanceCard(totalSemana: totalSeleccionado),
 
-          // --- SECCIÓN DE LA GRÁFICA ---
-          // Si hay ventas, mostramos la gráfica; si no, un mensaje informativo
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: ventasAMostrar.isNotEmpty
@@ -85,7 +76,6 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
                   ),
           ),
             
-          // --- SELECTOR DE SEMANA ---
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: Container(
@@ -99,7 +89,6 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
                   isExpanded: true,
                   value: _semanaSeleccionadaId,
                   icon: const Icon(Icons.keyboard_arrow_down, color: Colors.pink),
-                  // Invertimos las semanas para que la más reciente salga arriba en el menú
                   items: semanasDisponibles.reversed.map((semana) {
                     return DropdownMenuItem<String>(
                       value: semana['id'],
@@ -133,7 +122,6 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
             ),
           ),
 
-          // --- LISTA DE TRANSACCIONES ---
           Expanded(
             child: ventasAMostrar.isEmpty
                 ? _buildEmptyState(semanaActual['label'])
