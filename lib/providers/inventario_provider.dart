@@ -5,13 +5,14 @@ import '../models/venta.dart';
 import '../data/storage_service.dart';
 
 class InventarioProvider extends ChangeNotifier {
+  
   List<Producto> _productos = [];
   List<Venta> _ventas = [];
   List<String> _categorias = ['General']; // <-- Nueva lista de categorías dinámicas[cite: 1]
   double _dineroEnCaja = 0.0;
   String _filtro = '';
   
-  // Diccionario para manejar los carritos activos. La llave es el teléfono.
+// Diccionario para manejar los carritos activos (Apartados).
   Map<String, Carrito> _carritosActivos = {};
 
   final StorageService _storage = StorageService();
@@ -86,8 +87,11 @@ class InventarioProvider extends ChangeNotifier {
     _notificarYGuardar();
   }
 
+  // Modificado para descontar del saldo al crear producto nuevo
   void agregarProducto(Producto nuevo) {
     _productos.add(nuevo);
+    // Descontamos el costo total del saldo inicial
+    _dineroEnCaja -= (nuevo.costo * nuevo.cantidad);
     _notificarYGuardar();
   }
 
@@ -104,22 +108,38 @@ class InventarioProvider extends ChangeNotifier {
     _notificarYGuardar();
   }
 
-  void reabastecerProducto(String id, int cantidadEntrante, double costoUnitarioEntrante) {
-    final index = _productos.indexWhere((p) => p.id == id);
-    if (index != -1) {
-      final prod = _productos[index];
-      final int nuevoStockTotal = prod.cantidad + cantidadEntrante;
-      final double nuevoCostoPromedio = nuevoStockTotal > 0 
-          ? ((prod.cantidad * prod.costo) + (cantidadEntrante * costoUnitarioEntrante)) / nuevoStockTotal 
-          : costoUnitarioEntrante;
+// Modificado para descontar del saldo al reabastecer
+void reabastecerProducto(String id, int cantidadEntrante, double costoUnitarioEntrante) {
+  final index = _productos.indexWhere((p) => p.id == id);
+  if (index != -1) {
+    final prod = _productos[index];
+    final int nuevoStockTotal = prod.cantidad + cantidadEntrante;
+    final double nuevoCostoPromedio = nuevoStockTotal > 0 
+        ? ((prod.cantidad * prod.costo) + (cantidadEntrante * costoUnitarioEntrante)) / nuevoStockTotal 
+        : costoUnitarioEntrante;
 
-      _productos[index] = prod.copyWith(
-        cantidad: nuevoStockTotal,
-        costo: nuevoCostoPromedio,
-      );
-      _notificarYGuardar();
-    }
+    _productos[index] = prod.copyWith(
+      cantidad: nuevoStockTotal,
+      costo: nuevoCostoPromedio,
+    );
+    
+    // Descontamos el costo de la nueva tanda del saldo
+    _dineroEnCaja -= (costoUnitarioEntrante * cantidadEntrante);
+    _notificarYGuardar();
   }
+}
+
+// NUEVO: Método para registrar un gasto externo[cite: 1]
+void registrarGasto(double monto) {
+  _dineroEnCaja -= monto;
+  _notificarYGuardar();
+}
+
+// NUEVO: Método para registrar una inversión/inyección de capital[cite: 1]
+void registrarInversion(double monto) {
+  _dineroEnCaja += monto;
+  _notificarYGuardar();
+}
 
   // --- LÓGICA DE CARRITOS Y VENTAS ---
   void agregarAlCarrito(String telefono, Producto producto, int cantidad) {

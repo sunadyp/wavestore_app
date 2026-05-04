@@ -93,11 +93,11 @@ class _NavegacionPrincipalState extends State<NavegacionPrincipal> {
         return WillPopScope(
           onWillPop: () async => false, // Evita que usen el botón de retroceso de Android
           child: AlertDialog(
-            title: const Text('¡Bienvenida, Paola!'),
+            title: const Text('¡Bienvenida, amooooor!'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Como el negocio ya está en marcha, ¿con cuánto saldo en caja iniciamos?'),
+                const Text('¿Con cuántos millones iniciamos?'),
                 const SizedBox(height: 15),
                 TextField(
                   controller: _saldoController,
