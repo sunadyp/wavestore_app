@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/inventario_provider.dart';
 import '../../services/pdf_service.dart';
-import '../../models/venta.dart'; // <-- Agregamos esta importación para que reconozca "Carrito"
+import '../../models/venta.dart'; 
 
 class CarritosActivosScreen extends StatelessWidget {
   const CarritosActivosScreen({super.key});
@@ -64,7 +64,6 @@ class CarritosActivosScreen extends StatelessWidget {
                               children: [
                                 Text('Subtotal: \$${carrito.subtotal.toStringAsFixed(2)}'),
                                 
-                                // <-- NUEVO: Texto inteligente del descuento
                                 if (carrito.descuentoMonto > 0)
                                   Text(
                                     'Descuento ${carrito.descuentoEsPorcentaje ? '(${carrito.descuentoValor.toInt()}%)' : ''}: -\$${carrito.descuentoMonto.toStringAsFixed(2)}', 
@@ -77,7 +76,6 @@ class CarritosActivosScreen extends StatelessWidget {
                             TextButton.icon(
                               icon: const Icon(Icons.local_offer),
                               label: const Text('Descuento'),
-                              // <-- Pasamos el objeto carrito completo
                               onPressed: () => _mostrarDialogoDescuento(context, provider, telefono, carrito),
                             ),
                           ],
@@ -111,17 +109,12 @@ class CarritosActivosScreen extends StatelessWidget {
                               },
                             ),
 
-                            // Botón de Cobrar
+                            // ACTUALIZADO: Botón de Cobrar con doble confirmación
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                               icon: const Icon(Icons.check),
                               label: const Text('Cobrar'),
-                              onPressed: () {
-                                provider.cobrarCarrito(telefono);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Venta de $telefono cobrada con éxito')),
-                                );
-                              },
+                              onPressed: () => _confirmarCobro(context, provider, telefono, carrito.total),
                             ),
                           ],
                         ),
@@ -134,7 +127,34 @@ class CarritosActivosScreen extends StatelessWidget {
     );
   }
 
-  // <-- NUEVO: Diálogo reescrito con StatefulBuilder para manejar los chips de % y $
+  // <-- NUEVO: Diálogo de doble confirmación para cobrar
+  void _confirmarCobro(BuildContext context, InventarioProvider provider, String telefono, double totalFinal) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmar Cobro'),
+        content: Text('¿Estás seguro de cobrar este apartado por un total de \$${totalFinal.toStringAsFixed(2)}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx), 
+            child: const Text('Revisar', style: TextStyle(color: Colors.grey))
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            onPressed: () {
+              provider.cobrarCarrito(telefono);
+              Navigator.pop(ctx); // Cerrar el diálogo
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Venta de $telefono cobrada con éxito')),
+              );
+            },
+            child: const Text('Sí, cobrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _mostrarDialogoDescuento(BuildContext context, InventarioProvider provider, String telefono, Carrito carrito) {
     final ctrl = TextEditingController(text: carrito.descuentoValor > 0 ? carrito.descuentoValor.toString() : '');
     bool esPorcentaje = carrito.descuentoEsPorcentaje;

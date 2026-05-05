@@ -1,5 +1,3 @@
-// lib/models/venta.dart
-
 // Representa un producto específico dentro de un carrito o venta
 class ArticuloVenta {
   final String productoId;
@@ -34,7 +32,6 @@ class ArticuloVenta {
 }
 
 // Representa una venta en proceso (El Carrito)
-// Representa una venta en proceso (El Carrito)
 class Carrito {
   final String telefonoCliente;
   List<ArticuloVenta> articulos;
@@ -50,12 +47,31 @@ class Carrito {
 
   double get subtotal => articulos.fold(0.0, (sum, item) => sum + item.subtotal);
   
-  // <-- NUEVO: Calcula el monto dinámicamente
+  // Calcula el monto dinámicamente
   double get descuentoMonto => descuentoEsPorcentaje 
       ? (subtotal * (descuentoValor / 100)) 
       : descuentoValor;
 
   double get total => subtotal - descuentoMonto > 0 ? subtotal - descuentoMonto : 0.0;
+
+  // NUEVO: Serialización a Map
+  Map<String, dynamic> toMap() => {
+    'telefonoCliente': telefonoCliente,
+    'articulos': articulos.map((a) => a.toMap()).toList(),
+    'descuentoValor': descuentoValor,
+    'descuentoEsPorcentaje': descuentoEsPorcentaje,
+  };
+
+  // NUEVO: Deserialización desde Map
+  factory Carrito.fromMap(Map<String, dynamic> map) {
+    var listaArticulos = map['articulos'] as List<dynamic>? ?? [];
+    return Carrito(
+      telefonoCliente: map['telefonoCliente'] ?? '',
+      articulos: listaArticulos.map((e) => ArticuloVenta.fromMap(e as Map<String, dynamic>)).toList(),
+      descuentoValor: (map['descuentoValor'] ?? 0.0).toDouble(),
+      descuentoEsPorcentaje: map['descuentoEsPorcentaje'] ?? false,
+    );
+  }
 }
 
 // Representa una venta ya finalizada y cobrada

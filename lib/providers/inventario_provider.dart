@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/producto.dart';
 import '../models/venta.dart';
+import '../models/movimiento.dart'; 
 import '../data/storage_service.dart';
 
 class InventarioProvider extends ChangeNotifier {
   
   List<Producto> _productos = [];
   List<Venta> _ventas = [];
-  List<String> _categorias = ['General']; // <-- Nueva lista de categorías dinámicas[cite: 1]
+  List<String> _categorias = ['General'];
+  List<Movimiento> _movimientos = []; 
   double _dineroEnCaja = 0.0;
   String _filtro = '';
   
-// Diccionario para manejar los carritos activos (Apartados).
   Map<String, Carrito> _carritosActivos = {};
-
   final StorageService _storage = StorageService();
 
   InventarioProvider() {
@@ -27,7 +27,8 @@ class InventarioProvider extends ChangeNotifier {
     return _productos.where((p) => p.nombre.toLowerCase().contains(_filtro.toLowerCase())).toList();
   }
   List<Venta> get ventas => _ventas;
-  List<String> get categorias => _categorias; // <-- Getter para las categorías[cite: 1]
+  List<String> get categorias => _categorias;
+  List<Movimiento> get movimientos => _movimientos; 
   double get dineroEnCaja => _dineroEnCaja;
   Map<String, Carrito> get carritosActivos => _carritosActivos;
 
@@ -35,7 +36,26 @@ class InventarioProvider extends ChangeNotifier {
   double get dineroPosible => _productos.fold(0, (sum, item) => sum + (item.precioVenta * item.cantidad));
   double get gananciaPotencial => dineroPosible - capitalInvertido;
 
-  // --- LÓGICA DE FILTRADO Y SEMANAS ---
+  // --- NUEVOS GETTERS PARA ESTADÍSTICAS MENSUALES ---
+  
+  double get promedioMensual {
+    final stats = obtenerEstadisticasMensuales();
+    if (stats.isEmpty) return 0.0;
+    double totalGanancia = stats.fold(0.0, (sum, item) => sum + item['ganancia']);
+    return totalGanancia / stats.length;
+  }
+
+  double get gananciaMesActual {
+    final ahora = DateTime.now();
+    final mesActual = "${ahora.year}-${ahora.month.toString().padLeft(2, '0')}";
+    final stats = obtenerEstadisticasMensuales();
+    
+    final actual = stats.where((s) => s['mes_anio'] == mesActual).toList();
+    if (actual.isEmpty) return 0.0;
+    return actual.first['ganancia'];
+  }
+
+  // --- LÓGICA DE FILTRADO, SEMANAS Y MESES ---
   List<Venta> obtenerVentasPorRango(DateTime inicio, DateTime fin) {
     final inicioDia = DateTime(inicio.year, inicio.month, inicio.day, 0, 0, 0);
     final finDelDia = DateTime(fin.year, fin.month, fin.day, 23, 59, 59);
@@ -58,13 +78,54 @@ class InventarioProvider extends ChangeNotifier {
     return semanas;
   }
 
+  // NUEVO: Agrupar datos por mes para la nueva pantalla de reportes
+  List<Map<String, dynamic>> obtenerEstadisticasMensuales() {
+    Map<String, Map<String, dynamic>> stats = {};
+
+    // Sumar ingresos (Ventas)
+    for (var v in _ventas) {
+      String mes = "${v.fecha.year}-${v.fecha.month.toString().padLeft(2, '0')}";
+      if (!stats.containsKey(mes)) {
+        stats[mes] = {'ingresos': 0.0, 'gastos': 0.0, 'fecha': DateTime(v.fecha.year, v.fecha.month)};
+      }
+      stats[mes]!['ingresos'] += v.totalFinal;
+    }
+
+    // Sumar egresos (Gastos)
+    for (var m in _movimientos) {
+      if (!m.esInversion) {
+        String mes = "${m.fecha.year}-${m.fecha.month.toString().padLeft(2, '0')}";
+        if (!stats.containsKey(mes)) {
+          stats[mes] = {'ingresos': 0.0, 'gastos': 0.0, 'fecha': DateTime(m.fecha.year, m.fecha.month)};
+        }
+        stats[mes]!['gastos'] += m.monto;
+      }
+    }
+
+    // Convertir a lista y ordenar desde el mes más reciente al más antiguo
+    List<Map<String, dynamic>> listaStats = stats.entries.map((e) {
+      double ingresos = e.value['ingresos'];
+      double gastos = e.value['gastos'];
+      double ganancia = ingresos - gastos;
+      return {
+        'mes_anio': e.key,
+        'fecha': e.value['fecha'],
+        'ingresos': ingresos,
+        'gastos': gastos,
+        'ganancia': ganancia,
+      };
+    }).toList();
+
+    listaStats.sort((a, b) => (b['fecha'] as DateTime).compareTo(a['fecha'] as DateTime));
+    return listaStats;
+  }
+
   // --- ACCIONES DE INVENTARIO Y CATEGORÍAS ---
   void filtrar(String texto) {
     _filtro = texto;
     notifyListeners();
   }
 
-  // Método para agregar categorías dinámicamente[cite: 1]
   void agregarCategoria(String nombre) {
     if (nombre.isNotEmpty && !_categorias.contains(nombre)) {
       _categorias.add(nombre);
@@ -78,8 +139,14 @@ class InventarioProvider extends ChangeNotifier {
       productos: _productos,
       ventas: _ventas,
       caja: _dineroEnCaja,
-      categorias: _categorias, // <-- Ahora persistimos las categorías[cite: 1]
+      categorias: _categorias,
+      movimientos: _movimientos, 
     );
+  }
+
+  void _guardarCarritos() {
+    final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+    _storage.guardarCarritosActivos(mapAGuardar);
   }
 
   void agregarSaldoInicial(double saldo) {
@@ -87,10 +154,8 @@ class InventarioProvider extends ChangeNotifier {
     _notificarYGuardar();
   }
 
-  // Modificado para descontar del saldo al crear producto nuevo
   void agregarProducto(Producto nuevo) {
     _productos.add(nuevo);
-    // Descontamos el costo total del saldo inicial
     _dineroEnCaja -= (nuevo.costo * nuevo.cantidad);
     _notificarYGuardar();
   }
@@ -108,38 +173,48 @@ class InventarioProvider extends ChangeNotifier {
     _notificarYGuardar();
   }
 
-// Modificado para descontar del saldo al reabastecer
-void reabastecerProducto(String id, int cantidadEntrante, double costoUnitarioEntrante) {
-  final index = _productos.indexWhere((p) => p.id == id);
-  if (index != -1) {
-    final prod = _productos[index];
-    final int nuevoStockTotal = prod.cantidad + cantidadEntrante;
-    final double nuevoCostoPromedio = nuevoStockTotal > 0 
-        ? ((prod.cantidad * prod.costo) + (cantidadEntrante * costoUnitarioEntrante)) / nuevoStockTotal 
-        : costoUnitarioEntrante;
+  void reabastecerProducto(String id, int cantidadEntrante, double costoUnitarioEntrante) {
+    final index = _productos.indexWhere((p) => p.id == id);
+    if (index != -1) {
+      final prod = _productos[index];
+      final int nuevoStockTotal = prod.cantidad + cantidadEntrante;
+      final double nuevoCostoPromedio = nuevoStockTotal > 0 
+          ? ((prod.cantidad * prod.costo) + (cantidadEntrante * costoUnitarioEntrante)) / nuevoStockTotal 
+          : costoUnitarioEntrante;
 
-    _productos[index] = prod.copyWith(
-      cantidad: nuevoStockTotal,
-      costo: nuevoCostoPromedio,
-    );
-    
-    // Descontamos el costo de la nueva tanda del saldo
-    _dineroEnCaja -= (costoUnitarioEntrante * cantidadEntrante);
+      _productos[index] = prod.copyWith(
+        cantidad: nuevoStockTotal,
+        costo: nuevoCostoPromedio,
+      );
+      
+      _dineroEnCaja -= (costoUnitarioEntrante * cantidadEntrante);
+      _notificarYGuardar();
+    }
+  }
+
+  void registrarGasto(double monto, String descripcion) {
+    _dineroEnCaja -= monto;
+    _movimientos.add(Movimiento(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      descripcion: descripcion.isEmpty ? 'Gasto general' : descripcion,
+      monto: monto,
+      fecha: DateTime.now(),
+      esInversion: false,
+    ));
     _notificarYGuardar();
   }
-}
 
-// NUEVO: Método para registrar un gasto externo[cite: 1]
-void registrarGasto(double monto) {
-  _dineroEnCaja -= monto;
-  _notificarYGuardar();
-}
-
-// NUEVO: Método para registrar una inversión/inyección de capital[cite: 1]
-void registrarInversion(double monto) {
-  _dineroEnCaja += monto;
-  _notificarYGuardar();
-}
+  void registrarInversion(double monto, String descripcion) {
+    _dineroEnCaja += monto;
+    _movimientos.add(Movimiento(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      descripcion: descripcion.isEmpty ? 'Inversión' : descripcion,
+      monto: monto,
+      fecha: DateTime.now(),
+      esInversion: true,
+    ));
+    _notificarYGuardar();
+  }
 
   // --- LÓGICA DE CARRITOS Y VENTAS ---
   void agregarAlCarrito(String telefono, Producto producto, int cantidad) {
@@ -171,13 +246,17 @@ void registrarInversion(double monto) {
     }
 
     _productos[indexProducto] = producto.copyWith(cantidad: producto.cantidad - cantidad);
-    notifyListeners();
+    
+    _guardarCarritos();
+    _notificarYGuardar(); 
   }
 
   void aplicarDescuentoACarrito(String telefono, double valor, bool esPorcentaje) {
     if (_carritosActivos.containsKey(telefono)) {
       _carritosActivos[telefono]!.descuentoValor = valor;
       _carritosActivos[telefono]!.descuentoEsPorcentaje = esPorcentaje;
+      
+      _guardarCarritos();
       notifyListeners();
     }
   }
@@ -198,6 +277,8 @@ void registrarInversion(double monto) {
     _ventas.add(nuevaVenta);
     _dineroEnCaja += nuevaVenta.totalFinal;
     _carritosActivos.remove(telefono);
+    
+    _guardarCarritos();
     _notificarYGuardar();
   }
 
@@ -214,7 +295,9 @@ void registrarInversion(double monto) {
       }
     }
     _carritosActivos.remove(telefono);
-    notifyListeners();
+    
+    _guardarCarritos();
+    _notificarYGuardar();
   }
 
   void revertirVenta(String idVenta) {
@@ -240,7 +323,12 @@ void registrarInversion(double monto) {
     _productos = await _storage.cargarProductos();
     _ventas = await _storage.cargarVentas();
     _dineroEnCaja = await _storage.cargarCaja();
-    _categorias = await _storage.cargarCategorias(); // <-- Carga las categorías guardadas[cite: 1]
+    _categorias = await _storage.cargarCategorias();
+    _movimientos = await _storage.cargarMovimientos();
+
+    final carritosRaw = await _storage.cargarCarritosActivos();
+    _carritosActivos = carritosRaw.map((key, value) => MapEntry(key, Carrito.fromMap(value)));
+
     notifyListeners();
   }
 }

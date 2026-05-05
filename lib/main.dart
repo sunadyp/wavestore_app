@@ -4,8 +4,9 @@ import 'providers/inventario_provider.dart';
 import 'ui/screens/dashboard_screen.dart';
 import 'ui/screens/inventario_screen.dart';
 import 'ui/screens/finanzas_screen.dart';
-import 'ui/screens/carritos_activos_screen.dart'; // <-- IMPORT NUEVO
-import 'data/storage_service.dart'; // <-- IMPORT NUEVO PARA EL SALDO
+import 'ui/screens/carritos_activos_screen.dart'; 
+import 'ui/screens/reportes_screen.dart'; // <-- IMPORT NUEVO
+import 'data/storage_service.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,18 +59,18 @@ class NavegacionPrincipal extends StatefulWidget {
 class _NavegacionPrincipalState extends State<NavegacionPrincipal> {
   int _indiceActual = 0;
 
-  // <-- Se agregó la nueva pantalla a la lista
+  // <-- Se agregó ReportesScreen a la lista
   final List<Widget> _pantallas = [
     const DashboardScreen(),
     const InventarioScreen(),
     const FinanzasScreen(),
     const CarritosActivosScreen(), 
+    const ReportesScreen(), // <-- NUEVA PANTALLA
   ];
 
   @override
   void initState() {
     super.initState();
-    // Esto dispara la validación del saldo inicial justo después de que la pantalla carga
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _verificarSaldoInicial();
     });
@@ -88,10 +89,10 @@ class _NavegacionPrincipalState extends State<NavegacionPrincipal> {
 
     showDialog(
       context: context,
-      barrierDismissible: false, // Evita que lo cierren tocando afuera
+      barrierDismissible: false, 
       builder: (context) {
         return WillPopScope(
-          onWillPop: () async => false, // Evita que usen el botón de retroceso de Android
+          onWillPop: () async => false, 
           child: AlertDialog(
             title: const Text('¡Bienvenida, amooooor!'),
             content: Column(
@@ -124,7 +125,6 @@ class _NavegacionPrincipalState extends State<NavegacionPrincipal> {
                     await StorageService.setPrimeraVezCompletada();
                     
                     if (mounted) {
-                      // Inyectamos el saldo en el Provider para que actualice la caja
                       context.read<InventarioProvider>().agregarSaldoInicial(saldo);
                       Navigator.of(context).pop();
                     }
@@ -138,7 +138,6 @@ class _NavegacionPrincipalState extends State<NavegacionPrincipal> {
       }
     );
   }
-  // --------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -149,7 +148,7 @@ class _NavegacionPrincipalState extends State<NavegacionPrincipal> {
       ),
       body: _pantallas[_indiceActual],
       bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed, // <-- IMPORTANTE: Evita que se rompa el diseño al tener 4 botones
+        type: BottomNavigationBarType.fixed, 
         currentIndex: _indiceActual,
         onTap: (index) => setState(() => _indiceActual = index),
         selectedItemColor: Theme.of(context).colorScheme.primary,
@@ -158,7 +157,8 @@ class _NavegacionPrincipalState extends State<NavegacionPrincipal> {
           BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'Resumen'),
           BottomNavigationBarItem(icon: Icon(Icons.inventory_2), label: 'Inventario'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Historial'),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Apartados'), // <-- NUEVO BOTÓN
+          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Apartados'), 
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Reportes'), // <-- NUEVO BOTÓN
         ],
       ),
     );
