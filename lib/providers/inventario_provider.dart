@@ -78,7 +78,6 @@ class InventarioProvider extends ChangeNotifier {
     return semanas;
   }
 
-  // NUEVO: Agrupar datos por mes para la nueva pantalla de reportes
   List<Map<String, dynamic>> obtenerEstadisticasMensuales() {
     Map<String, Map<String, dynamic>> stats = {};
 
@@ -102,7 +101,6 @@ class InventarioProvider extends ChangeNotifier {
       }
     }
 
-    // Convertir a lista y ordenar desde el mes más reciente al más antiguo
     List<Map<String, dynamic>> listaStats = stats.entries.map((e) {
       double ingresos = e.value['ingresos'];
       double gastos = e.value['gastos'];
@@ -156,7 +154,20 @@ class InventarioProvider extends ChangeNotifier {
 
   void agregarProducto(Producto nuevo) {
     _productos.add(nuevo);
-    _dineroEnCaja -= (nuevo.costo * nuevo.cantidad);
+    
+    // Calcular el gasto total de este nuevo inventario
+    double gastoPorInventario = nuevo.costo * nuevo.cantidad;
+    _dineroEnCaja -= gastoPorInventario;
+
+    // CORRECCIÓN: Registrar formalmente el movimiento en el historial
+    _movimientos.add(Movimiento(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      descripcion: 'Compra inicial inventario: ${nuevo.nombre}',
+      monto: gastoPorInventario,
+      fecha: DateTime.now(),
+      esInversion: false, // Falso porque es un gasto (salida de dinero)
+    ));
+
     _notificarYGuardar();
   }
 
@@ -187,7 +198,19 @@ class InventarioProvider extends ChangeNotifier {
         costo: nuevoCostoPromedio,
       );
       
-      _dineroEnCaja -= (costoUnitarioEntrante * cantidadEntrante);
+      // Calcular el gasto del reabastecimiento
+      double gastoPorReabastecer = costoUnitarioEntrante * cantidadEntrante;
+      _dineroEnCaja -= gastoPorReabastecer;
+
+      // CORRECCIÓN: Registrar formalmente el movimiento en el historial
+      _movimientos.add(Movimiento(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        descripcion: 'Reabastecimiento: ${prod.nombre} ($cantidadEntrante uds)',
+        monto: gastoPorReabastecer,
+        fecha: DateTime.now(),
+        esInversion: false, // Falso porque es un gasto (salida de dinero)
+      ));
+
       _notificarYGuardar();
     }
   }
