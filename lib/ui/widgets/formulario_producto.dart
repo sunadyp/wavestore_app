@@ -17,6 +17,9 @@ class _FormularioProductoState extends State<FormularioProducto> {
   final _precioCtrl = TextEditingController();
   final _cantidadCtrl = TextEditingController();
   String _categoriaSeleccionada = 'General';
+  
+  // Viene en TRUE por defecto para que reste de la caja automáticamente
+  bool _afectaCaja = true;
 
   @override
   void initState() {
@@ -29,9 +32,9 @@ class _FormularioProductoState extends State<FormularioProducto> {
       _cantidadCtrl.text = p.cantidad.toString();
       _categoriaSeleccionada = p.categoria;
     }
+    // Eliminamos el bloque 'else' que lo pasaba a false. Ahora siempre inicia en true.
   }
 
-  // NUEVO: Diálogo para crear categoría desde el formulario[cite: 1]
   void _mostrarDialogoNuevaCategoria() {
     final controller = TextEditingController();
     showDialog(
@@ -41,7 +44,6 @@ class _FormularioProductoState extends State<FormularioProducto> {
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Ej: Maquillaje, Skincare'),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
@@ -65,7 +67,6 @@ class _FormularioProductoState extends State<FormularioProducto> {
     final esEdicion = widget.productoActual != null;
     final categoriasDisponibles = context.watch<InventarioProvider>().categorias;
 
-    // Aseguramos que la categoría seleccionada exista en la lista actual[cite: 1]
     if (!categoriasDisponibles.contains(_categoriaSeleccionada)) {
       _categoriaSeleccionada = categoriasDisponibles.first;
     }
@@ -84,7 +85,6 @@ class _FormularioProductoState extends State<FormularioProducto> {
             const SizedBox(height: 15),
             TextField(controller: _nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre')),
             
-            // FILA PARA CATEGORÍA Y BOTÓN DE AGREGAR[cite: 1]
             Row(
               children: [
                 Expanded(
@@ -105,6 +105,20 @@ class _FormularioProductoState extends State<FormularioProducto> {
             TextField(controller: _costoCtrl, decoration: const InputDecoration(labelText: 'Costo'), keyboardType: TextInputType.number),
             TextField(controller: _precioCtrl, decoration: const InputDecoration(labelText: 'Precio venta'), keyboardType: TextInputType.number),
             TextField(controller: _cantidadCtrl, decoration: const InputDecoration(labelText: 'Stock'), keyboardType: TextInputType.number),
+            
+            // Switch para decidir si afecta la caja (Solo visible al crear)
+            if (!esEdicion) ...[
+              const SizedBox(height: 10),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Restar costo de la caja', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Desactívalo si este producto ya lo tenías comprado desde antes.', style: TextStyle(fontSize: 12)),
+                value: _afectaCaja,
+                activeColor: Theme.of(context).colorScheme.primary,
+                onChanged: (val) => setState(() => _afectaCaja = val),
+              ),
+            ],
+
             const SizedBox(height: 20),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -125,7 +139,7 @@ class _FormularioProductoState extends State<FormularioProducto> {
                 if (esEdicion) {
                   context.read<InventarioProvider>().editarProducto(prod.id, prod);
                 } else {
-                  context.read<InventarioProvider>().agregarProducto(prod);
+                  context.read<InventarioProvider>().agregarProducto(prod, afectaCaja: _afectaCaja);
                 }
                 Navigator.pop(context);
               },

@@ -152,21 +152,23 @@ class InventarioProvider extends ChangeNotifier {
     _notificarYGuardar();
   }
 
-  void agregarProducto(Producto nuevo) {
+  void agregarProducto(Producto nuevo, {bool afectaCaja = true}) {
     _productos.add(nuevo);
     
-    // Calcular el gasto total de este nuevo inventario
-    double gastoPorInventario = nuevo.costo * nuevo.cantidad;
-    _dineroEnCaja -= gastoPorInventario;
+    if (afectaCaja) {
+      // Calcular el gasto total de este nuevo inventario
+      double gastoPorInventario = nuevo.costo * nuevo.cantidad;
+      _dineroEnCaja -= gastoPorInventario;
 
-    // CORRECCIÓN: Registrar formalmente el movimiento en el historial
-    _movimientos.add(Movimiento(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      descripcion: 'Compra inicial inventario: ${nuevo.nombre}',
-      monto: gastoPorInventario,
-      fecha: DateTime.now(),
-      esInversion: false, // Falso porque es un gasto (salida de dinero)
-    ));
+      // Registrar formalmente el movimiento en el historial
+      _movimientos.add(Movimiento(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        descripcion: 'Compra inicial inventario: ${nuevo.nombre}',
+        monto: gastoPorInventario,
+        fecha: DateTime.now(),
+        esInversion: false, 
+      ));
+    }
 
     _notificarYGuardar();
   }
@@ -184,7 +186,7 @@ class InventarioProvider extends ChangeNotifier {
     _notificarYGuardar();
   }
 
-  void reabastecerProducto(String id, int cantidadEntrante, double costoUnitarioEntrante) {
+  void reabastecerProducto(String id, int cantidadEntrante, double costoUnitarioEntrante, {bool afectaCaja = true}) {
     final index = _productos.indexWhere((p) => p.id == id);
     if (index != -1) {
       final prod = _productos[index];
@@ -198,18 +200,20 @@ class InventarioProvider extends ChangeNotifier {
         costo: nuevoCostoPromedio,
       );
       
-      // Calcular el gasto del reabastecimiento
-      double gastoPorReabastecer = costoUnitarioEntrante * cantidadEntrante;
-      _dineroEnCaja -= gastoPorReabastecer;
+      if (afectaCaja) {
+        // Calcular el gasto del reabastecimiento
+        double gastoPorReabastecer = costoUnitarioEntrante * cantidadEntrante;
+        _dineroEnCaja -= gastoPorReabastecer;
 
-      // CORRECCIÓN: Registrar formalmente el movimiento en el historial
-      _movimientos.add(Movimiento(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        descripcion: 'Reabastecimiento: ${prod.nombre} ($cantidadEntrante uds)',
-        monto: gastoPorReabastecer,
-        fecha: DateTime.now(),
-        esInversion: false, // Falso porque es un gasto (salida de dinero)
-      ));
+        // Registrar formalmente el movimiento en el historial
+        _movimientos.add(Movimiento(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          descripcion: 'Reabastecimiento: ${prod.nombre} ($cantidadEntrante uds)',
+          monto: gastoPorReabastecer,
+          fecha: DateTime.now(),
+          esInversion: false, 
+        ));
+      }
 
       _notificarYGuardar();
     }

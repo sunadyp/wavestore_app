@@ -29,7 +29,7 @@ class ItemProducto extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row( // Usamos Row manual en lugar de ListTile para control total
+          child: Row( 
             children: [
               Expanded(
                 child: Column(
@@ -39,8 +39,8 @@ class ItemProducto extends StatelessWidget {
                     Text(
                       producto.nombre, 
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                      maxLines: 1, // Evita que nombres largos creen nuevas líneas
-                      overflow: TextOverflow.ellipsis, // Agrega "..." si el nombre es muy largo
+                      maxLines: 1, 
+                      overflow: TextOverflow.ellipsis, 
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -48,7 +48,6 @@ class ItemProducto extends StatelessWidget {
                       style: const TextStyle(fontSize: 13, color: Colors.black87),
                     ),
                     const SizedBox(height: 6),
-                    // Usamos Wrap para que las etiquetas no causen overflow horizontal
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
@@ -82,13 +81,11 @@ class ItemProducto extends StatelessWidget {
                   ],
                 ),
               ),
-
-              // 2. LOS BOTONES EN UN ROW CON TAMAÑO MÍNIMO
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    visualDensity: VisualDensity.compact, // Reduce el padding interno
+                    visualDensity: VisualDensity.compact, 
                     icon: const Icon(Icons.add_box, color: Colors.blue, size: 22),
                     onPressed: () => _reabastecer(context, inventario),
                   ),
@@ -112,8 +109,6 @@ class ItemProducto extends StatelessWidget {
     );
   }
 
-  // --- MÉTODOS DE APOYO (SIN CAMBIOS) ---
-
   void _ejecutarVenta(BuildContext context, InventarioProvider provider) async {
     final resultado = await UIUtils.mostrarDialogoVenta(context, producto);
     if (resultado != null) {
@@ -128,13 +123,71 @@ class ItemProducto extends StatelessWidget {
     }
   }
 
+  // NUEVO: Diálogo de reabastecimiento integrado aquí para tener control del Switch
   void _reabastecer(BuildContext context, InventarioProvider provider) async {
-    final resultado = await UIUtils.mostrarDialogoReabastecer(context, producto);
+    final qtyCtrl = TextEditingController();
+    final costoCtrl = TextEditingController(text: producto.costo.toString());
+    bool afectaCaja = true;
+
+    final resultado = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Reabastecer\n${producto.nombre}', textAlign: TextAlign.center),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: qtyCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Cantidad a ingresar'),
+                    autofocus: true,
+                  ),
+                  TextField(
+                    controller: costoCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Costo unitario (\$)'),
+                  ),
+                  const SizedBox(height: 15),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Restar de la caja', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    subtitle: const Text('Apágalo si es mercancía vieja o regalada.', style: TextStyle(fontSize: 12)),
+                    value: afectaCaja,
+                    activeColor: Theme.of(context).colorScheme.primary,
+                    onChanged: (val) => setState(() => afectaCaja = val),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                ElevatedButton(
+                  onPressed: () {
+                    final q = int.tryParse(qtyCtrl.text) ?? 0;
+                    final c = double.tryParse(costoCtrl.text) ?? 0.0;
+                    if (q > 0) {
+                      Navigator.pop(ctx, {'cantidad': q, 'costo': c, 'afectaCaja': afectaCaja});
+                    }
+                  },
+                  child: const Text('Confirmar'),
+                ),
+              ],
+            );
+          }
+        );
+      }
+    );
+
     if (resultado != null) {
       final int qty = resultado['cantidad'];
       final double costo = resultado['costo'];
-      provider.reabastecerProducto(producto.id, qty, costo);
-      _notificar(context, 'Stock sumado y costo promediado con éxito');
+      final bool afecta = resultado['afectaCaja'];
+      
+      // NUEVO: Pasamos el parámetro afectaCaja
+      provider.reabastecerProducto(producto.id, qty, costo, afectaCaja: afecta);
+      _notificar(context, 'Stock actualizado exitosamente');
     }
   }
 
@@ -152,11 +205,6 @@ class ItemProducto extends StatelessWidget {
   void _notificar(BuildContext context, String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
-
-  Widget _buildAvatar(BuildContext context) => CircleAvatar(
-    backgroundColor: Theme.of(context).colorScheme.secondary,
-    child: const Icon(Icons.inventory_2, color: Colors.white, size: 20),
-  );
 
   Widget _buildDeleteBackground() => Container(
     alignment: Alignment.centerRight,
