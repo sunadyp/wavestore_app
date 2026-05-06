@@ -15,14 +15,14 @@ class DashboardScreen extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(esInversion ? 'Añadir Inversión' : 'Registrar Gasto'),
+        title: Text(esInversion ? 'Añadir Ingreso' : 'Registrar Gasto'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: controllerDesc,
               decoration: const InputDecoration(
-                labelText: 'Descripción (Ej. Pago de luz)',
+                labelText: 'Descripción',
               ),
               textCapitalization: TextCapitalization.sentences,
             ),
@@ -45,7 +45,7 @@ class DashboardScreen extends StatelessWidget {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: esInversion ? Colors.blue : Colors.red,
+              backgroundColor: esInversion ? const Color.fromARGB(255, 217, 91, 186) : const Color.fromARGB(255, 217, 91, 186),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
@@ -81,7 +81,6 @@ class DashboardScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
-        const Text('Dashboard', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         
         // Tarjeta de Saldo Principal
@@ -130,7 +129,7 @@ class DashboardScreen extends StatelessWidget {
           children: [
             Expanded(
               child: _BotonAccionRapida(
-                titulo: 'Inversión',
+                titulo: 'Ingreso',
                 icono: Icons.trending_up_rounded,
                 colorBase: Colors.green,
                 onTap: () => _mostrarDialogoDinero(context, esInversion: true),
