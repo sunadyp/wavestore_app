@@ -12,10 +12,8 @@ class InventarioScreen extends StatefulWidget {
 }
 
 class _InventarioScreenState extends State<InventarioScreen> {
-  // Estado para el filtro actual
   String _categoriaSeleccionada = 'Todas';
 
-  // Función interna para no repetir código del modal
   void _mostrarFormulario(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -29,25 +27,14 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<InventarioProvider>();
-    final inventarioBuscador = provider.productos;
-
-    // OPTIMIZACIÓN 1: Extracción de categorías únicas de forma nativa y rápida
-    final Set<String> categoriasUnicas = {
-      'Todas',
-      ...inventarioBuscador.map((p) => p.categoria)
-    };
-
-    // Aplicar el filtro de los chips sobre los resultados del buscador
-    final inventarioFiltrado = _categoriaSeleccionada == 'Todas'
-        ? inventarioBuscador
-        : inventarioBuscador.where((p) => p.categoria == _categoriaSeleccionada).toList();
+    // 🚀 OPTIMIZACIÓN: Se eliminó el context.watch() global. 
+    // Ahora esta pantalla principal es inmune a reconstrucciones innecesarias.
 
     return Scaffold(
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Barra de búsqueda
+          // 1. Barra de búsqueda (Completamente estática)
           Padding(
             padding: const EdgeInsets.only(top: 16.0, left: 16.0, right: 16.0, bottom: 8.0),
             child: TextField(
@@ -58,51 +45,75 @@ class _InventarioScreenState extends State<InventarioScreen> {
                 filled: true,
                 fillColor: Colors.grey[100],
               ),
-              onChanged: (value) => provider.filtrar(value), // Filtra en tiempo real
+              // context.read() no escucha, solo ejecuta. ¡Perfecto para rendimiento!
+              onChanged: (value) => context.read<InventarioProvider>().filtrar(value), 
             ),
           ),
           
-          // 2. Filtros por Categoría (Chips)
-          SizedBox(
-            height: 50,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              children: categoriasUnicas.map((categoria) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: ChoiceChip(
-                    label: Text(categoria),
-                    selected: _categoriaSeleccionada == categoria,
-                    selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                    onSelected: (bool selected) {
-                      setState(() {
-                        _categoriaSeleccionada = categoria;
-                      });
-                    },
-                  ),
-                );
-              }).toList(),
-            ),
+          // 2. Filtros por Categoría (Selector inteligente)
+          Selector<InventarioProvider, String>(
+            // Retornamos un String con las categorías unidas para que Flutter sepa 
+            // con exactitud milimétrica si realmente hubo un cambio o no.
+            selector: (_, provider) {
+              final unicas = {'Todas', ...provider.productos.map((p) => p.categoria)};
+              return unicas.join('|'); 
+            },
+            builder: (context, categoriasString, child) {
+              final categoriasUnicas = categoriasString.split('|');
+              return SizedBox(
+                height: 50,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  children: categoriasUnicas.map((categoria) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: ChoiceChip(
+                        label: Text(categoria),
+                        selected: _categoriaSeleccionada == categoria,
+                        selectedColor: Theme.of(context).colorScheme.primaryContainer,
+                        onSelected: (bool selected) {
+                          setState(() {
+                            _categoriaSeleccionada = categoria;
+                          });
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              );
+            },
           ),
           
-          // 3. Lista de productos filtrada
+          // 3. Lista de productos filtrada (Consumer localizado)
           Expanded(
-            child: inventarioFiltrado.isEmpty 
-              ? const Center(child: Text('No hay productos que coincidan'))
-              : ListView.builder(
+            child: Consumer<InventarioProvider>(
+              builder: (context, provider, child) {
+                final inventarioBuscador = provider.productos;
+                final inventarioFiltrado = _categoriaSeleccionada == 'Todas'
+                    ? inventarioBuscador
+                    : inventarioBuscador.where((p) => p.categoria == _categoriaSeleccionada).toList();
+
+                if (inventarioFiltrado.isEmpty) {
+                  return const Center(child: Text('No hay productos que coincidan'));
+                }
+
+                return ListView.builder(
                   padding: const EdgeInsets.all(16.0),
                   itemCount: inventarioFiltrado.length,
                   itemBuilder: (context, index) {
                     final producto = inventarioFiltrado[index];
                     
-                    // OPTIMIZACIÓN 2: Uso de ValueKey para indexar correctamente los widgets
+                    // Gracias al ValueKey, cuando se actualiza el stock de un producto, 
+                    // Flutter repinta SOLO esa tarjeta y deja las demás intactas.
                     return ItemProducto(
-                      key: ValueKey(producto.id), // <-- Esto evita redibujados innecesarios al filtrar
+                      key: ValueKey(producto.id), 
                       producto: producto,
                     );
                   },
-                ),
+                );
+              },
+            ),
           ),
         ],
       ),

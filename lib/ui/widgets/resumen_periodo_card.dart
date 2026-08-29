@@ -7,6 +7,9 @@ class ResumenPeriodoCard extends StatelessWidget {
   final bool esManual;
   final VoidCallback onTapCalendario;
 
+  // 🚀 OPTIMIZACIÓN: Formateador estático para ahorrar memoria
+  static final DateFormat _dateFormatter = DateFormat('dd/MM');
+
   const ResumenPeriodoCard({
     super.key, 
     required this.rango, 
@@ -29,17 +32,24 @@ class ResumenPeriodoCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(esManual ? 'Filtro Manual' : 'Esta Semana', 
-                   style: const TextStyle(fontWeight: FontWeight.bold)),
-              IconButton(icon: const Icon(Icons.calendar_month), onPressed: onTapCalendario),
+              Text(
+                esManual ? 'Filtro Manual' : 'Esta Semana', 
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              IconButton(
+                icon: const Icon(Icons.calendar_month), 
+                onPressed: onTapCalendario,
+              ),
             ],
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${DateFormat('dd/MM').format(rango.start)} - ${DateFormat('dd/MM').format(rango.end)}'),
-              Text('\$${total.toStringAsFixed(2)}', 
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green)),
+              Text('${_dateFormatter.format(rango.start)} - ${_dateFormatter.format(rango.end)}'),
+              Text(
+                '\$${total.toStringAsFixed(2)}', 
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green),
+              ),
             ],
           ),
         ],

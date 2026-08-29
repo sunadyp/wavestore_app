@@ -4,7 +4,7 @@ import '../../providers/inventario_provider.dart';
 import '../widgets/resumen_balance_card.dart';
 import '../widgets/tarjeta_venta_historial.dart';
 import '../widgets/ventas_chart.dart';
-import '../widgets/lista_historial_movimientos.dart'; // <-- NUEVO IMPORT
+import '../widgets/lista_historial_movimientos.dart'; 
 
 class FinanzasScreen extends StatefulWidget {
   const FinanzasScreen({super.key});
@@ -18,7 +18,15 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<InventarioProvider>();
+    // 🚀 OPTIMIZACIÓN: context.select escucha EXCLUSIVAMENTE los cambios en 
+    // la longitud de las listas de ventas y movimientos.
+    // Ignorará por completo si se edita un producto o se agregan artículos a un carrito.
+    context.select<InventarioProvider, (int, int)>(
+      (p) => (p.ventas.length, p.movimientos.length)
+    );
+
+    // Usamos read() para acceder a los datos sin crear suscripciones globales pesadas
+    final provider = context.read<InventarioProvider>();
     final tema = Theme.of(context).colorScheme;
     
     final semanasDisponibles = provider.obtenerSemanasMesActual();
@@ -50,7 +58,7 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
       semanaActual['fin'],
     ).reversed.toList();
 
-    // NUEVO: Filtrar Gastos/Inversiones para que coincidan con la semana seleccionada
+    // Filtrar Gastos/Inversiones para que coincidan con la semana seleccionada
     final finDelDia = (semanaActual['fin'] as DateTime).add(const Duration(days: 1));
     final movimientosAMostrar = provider.movimientos.where((m) {
       return m.fecha.isAfter((semanaActual['inicio'] as DateTime).subtract(const Duration(seconds: 1))) &&
@@ -73,7 +81,7 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
               child: (ventasAMostrar.isNotEmpty || movimientosAMostrar.isNotEmpty)
                   ? VentasChart(
                       ventasSemana: ventasAMostrar, 
-                      movimientosSemana: movimientosAMostrar, // <-- Pasamos los movimientos
+                      movimientosSemana: movimientosAMostrar, 
                     )
                   : Container(
                       height: 180,
@@ -121,7 +129,7 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
               ),
             ),
 
-            // NUEVO: Pestañas de navegación
+            // Pestañas de navegación
             TabBar(
               labelColor: tema.primary,
               unselectedLabelColor: Colors.grey,
@@ -132,7 +140,7 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
               ],
             ),
 
-            // NUEVO: Vistas de las pestañas
+            // Vistas de las pestañas
             Expanded(
               child: TabBarView(
                 children: [
@@ -158,7 +166,6 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
     );
   }
 
-  // Modificado para adaptar el texto e icono según la pestaña
   Widget _buildEmptyState(String labelSemana, {bool isVentas = true}) {
     return Center(
       child: Column(

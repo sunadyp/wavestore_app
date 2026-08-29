@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/inventario_provider.dart';
 import '../widgets/tarjeta_financiera.dart';
+// Importa tu gráfica si decides agregarla aquí en el dashboard
+// import '../widgets/ventas_chart.dart'; 
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
-  // Diálogo genérico para Entrada/Salida de dinero
   void _mostrarDialogoDinero(BuildContext context, {required bool esInversion}) {
     final controllerMonto = TextEditingController();
-    final controllerDesc = TextEditingController(); // Descripción opcional
+    final controllerDesc = TextEditingController();
 
     showDialog(
       context: context,
@@ -54,6 +55,7 @@ class DashboardScreen extends StatelessWidget {
               final desc = controllerDesc.text.trim();
               
               if (monto > 0) {
+                // context.read es la forma correcta aquí (fuera del método build)
                 if (esInversion) {
                   context.read<InventarioProvider>().registrarInversion(monto, desc);
                 } else {
@@ -71,60 +73,70 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<InventarioProvider>();
     final tema = Theme.of(context).colorScheme;
 
-    // Obtenemos los datos calculados en el Provider
-    final gananciaActual = provider.gananciaMesActual;
-    final promedio = provider.promedioMensual;
-
+    // 🚀 OPTIMIZACIÓN: Se eliminó el context.watch() global.
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
         const SizedBox(height: 16),
         
-        // Tarjeta de Saldo Principal
-        TarjetaFinanciera(
-          titulo: 'Saldo', 
-          valor: '\$${provider.dineroEnCaja.toStringAsFixed(2)}',
-          icono: Icons.account_balance_wallet, 
-          colorFondo: tema.primary, 
-          colorTexto: Colors.white,
+        // Tarjeta de Saldo Principal aislada
+        Selector<InventarioProvider, double>(
+          selector: (_, provider) => provider.dineroEnCaja,
+          builder: (context, dineroEnCaja, child) {
+            return TarjetaFinanciera(
+              titulo: 'Saldo', 
+              valor: '\$${dineroEnCaja.toStringAsFixed(2)}',
+              icono: Icons.account_balance_wallet, 
+              colorFondo: tema.primary, 
+              colorTexto: Colors.white,
+            );
+          },
         ),
         
         const SizedBox(height: 20),
 
-                // --- NUEVA SECCIÓN: RENDIMIENTO DEL NEGOCIO ---
+        // --- SECCIÓN: RENDIMIENTO DEL NEGOCIO ---
         const Text('Rendimiento del Negocio', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: TarjetaFinanciera(
-              titulo: 'Ganancia del Mes', 
-              valor: '\$${gananciaActual.toStringAsFixed(2)}',
-              icono: Icons.insights, 
-              // Si la ganancia es positiva o 0, fondo verde. Si es negativa, fondo rojo.
-              colorFondo: gananciaActual >= 0 ? Colors.blue.shade50 : Colors.red.shade50, 
-              colorTexto: gananciaActual >= 0 ? Colors.blue.shade900 : Colors.red.shade900, 
-              esPequena: true,
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: TarjetaFinanciera(
-              titulo: 'Promedio Mensual', 
-              valor: '\$${promedio.toStringAsFixed(2)}',
-              icono: Icons.query_stats, 
-              colorFondo: Colors.pink.shade50, 
-              colorTexto: Colors.pink.shade900, 
-              esPequena: true,
-            )),
-          ],
+        
+        // Usamos Records () de Dart 3 para escuchar múltiples variables simultáneamente sin reconstruir lo demás
+        Selector<InventarioProvider, (double, double)>(
+          selector: (_, provider) => (provider.gananciaMesActual, provider.promedioMensual),
+          builder: (context, datos, child) {
+            final gananciaActual = datos.$1;
+            final promedio = datos.$2;
+            
+            return Row(
+              children: [
+                Expanded(child: TarjetaFinanciera(
+                  titulo: 'Ganancia del Mes', 
+                  valor: '\$${gananciaActual.toStringAsFixed(2)}',
+                  icono: Icons.insights, 
+                  colorFondo: gananciaActual >= 0 ? Colors.blue.shade50 : Colors.red.shade50, 
+                  colorTexto: gananciaActual >= 0 ? Colors.blue.shade900 : Colors.red.shade900, 
+                  esPequena: true,
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: TarjetaFinanciera(
+                  titulo: 'Promedio Mensual', 
+                  valor: '\$${promedio.toStringAsFixed(2)}',
+                  icono: Icons.query_stats, 
+                  colorFondo: Colors.pink.shade50, 
+                  colorTexto: Colors.pink.shade900, 
+                  esPequena: true,
+                )),
+              ],
+            );
+          },
         ),
 
         const SizedBox(height: 24),
         const Divider(),
         const SizedBox(height: 16),
         
-        // BOTONES DE ACCIÓN RÁPIDA
+        // BOTONES DE ACCIÓN RÁPIDA (Completamente estáticos)
         Row(
           children: [
             Expanded(
@@ -151,38 +163,47 @@ class DashboardScreen extends StatelessWidget {
         const Divider(),
         const SizedBox(height: 16),
 
-        // SECCIÓN: PROYECCIÓN DE INVENTARIO
+        // --- SECCIÓN: PROYECCIÓN DE INVENTARIO ---
         const Text('Proyección de Inventario', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
 
-        TarjetaFinanciera(
-          titulo: 'Total de Venta (Inventario)', 
-          valor: '\$${provider.dineroPosible.toStringAsFixed(2)}',
-          icono: Icons.inventory_2_outlined, 
-          colorFondo: Colors.white, 
-          colorTexto: Colors.black87,
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: TarjetaFinanciera(
-              titulo: 'Invertido', 
-              valor: '\$${provider.capitalInvertido.toStringAsFixed(2)}',
-              icono: Icons.shopping_bag_outlined, 
-              colorFondo: Colors.white, 
-              colorTexto: Colors.black87, 
-              esPequena: true,
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: TarjetaFinanciera(
-              titulo: 'Utilidad Potencial', 
-              valor: '\$${provider.gananciaPotencial.toStringAsFixed(2)}',
-              icono: Icons.savings_outlined, 
-              colorFondo: tema.secondary, 
-              colorTexto: Colors.black87, 
-              esPequena: true,
-            )),
-          ],
+        Selector<InventarioProvider, (double, double, double)>(
+          selector: (_, provider) => (provider.dineroPosible, provider.capitalInvertido, provider.gananciaPotencial),
+          builder: (context, datos, child) {
+            return Column(
+              children: [
+                TarjetaFinanciera(
+                  titulo: 'Total de Venta (Inventario)', 
+                  valor: '\$${datos.$1.toStringAsFixed(2)}',
+                  icono: Icons.inventory_2_outlined, 
+                  colorFondo: Colors.white, 
+                  colorTexto: Colors.black87,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: TarjetaFinanciera(
+                      titulo: 'Invertido', 
+                      valor: '\$${datos.$2.toStringAsFixed(2)}',
+                      icono: Icons.shopping_bag_outlined, 
+                      colorFondo: Colors.white, 
+                      colorTexto: Colors.black87, 
+                      esPequena: true,
+                    )),
+                    const SizedBox(width: 12),
+                    Expanded(child: TarjetaFinanciera(
+                      titulo: 'Utilidad Potencial', 
+                      valor: '\$${datos.$3.toStringAsFixed(2)}',
+                      icono: Icons.savings_outlined, 
+                      colorFondo: tema.secondary, 
+                      colorTexto: Colors.black87, 
+                      esPequena: true,
+                    )),
+                  ],
+                ),
+              ],
+            );
+          },
         ),
       ],
     );

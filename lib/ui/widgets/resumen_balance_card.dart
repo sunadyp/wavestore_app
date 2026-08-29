@@ -17,10 +17,14 @@ class ResumenBalanceCard extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text('Ventas de esta semana:', 
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          Text('\$${totalSemana.toStringAsFixed(2)}', 
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
+          const Text(
+            'Ventas de esta semana:', 
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          Text(
+            '\$${totalSemana.toStringAsFixed(2)}', 
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green),
+          ),
         ],
       ),
     );

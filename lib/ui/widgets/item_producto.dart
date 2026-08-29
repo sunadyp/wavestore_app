@@ -12,14 +12,15 @@ class ItemProducto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final inventario = context.read<InventarioProvider>();
+    // 🚀 OPTIMIZACIÓN: Quitamos la lectura del provider del método build.
+    // Solo lo leeremos en las funciones de los botones cuando se necesite.
 
     return Dismissible(
       key: Key(producto.id),
       direction: DismissDirection.endToStart,
       confirmDismiss: (_) => UIUtils.confirmarEliminacion(context, producto.nombre),
       onDismissed: (_) {
-        inventario.eliminarProducto(producto.id);
+        context.read<InventarioProvider>().eliminarProducto(producto.id);
         _notificar(context, '${producto.nombre} eliminado');
       },
       background: _buildDeleteBackground(),
@@ -87,13 +88,13 @@ class ItemProducto extends StatelessWidget {
                   IconButton(
                     visualDensity: VisualDensity.compact, 
                     icon: const Icon(Icons.add_box, color: Colors.blue, size: 22),
-                    onPressed: () => _reabastecer(context, inventario),
+                    onPressed: () => _reabastecer(context),
                   ),
                   if (producto.cantidad > 0)
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.point_of_sale, color: Colors.green, size: 22),
-                      onPressed: () => _ejecutarVenta(context, inventario),
+                      onPressed: () => _ejecutarVenta(context),
                     ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
@@ -109,11 +110,13 @@ class ItemProducto extends StatelessWidget {
     );
   }
 
-  void _ejecutarVenta(BuildContext context, InventarioProvider provider) async {
+  void _ejecutarVenta(BuildContext context) async {
     final resultado = await UIUtils.mostrarDialogoVenta(context, producto);
-    if (resultado != null) {
+    if (resultado != null && context.mounted) {
+      final provider = context.read<InventarioProvider>();
       final String telefono = resultado['telefono'];
       final int qty = resultado['cantidad'];
+      
       if (qty > 0 && qty <= producto.cantidad) {
         provider.agregarAlCarrito(telefono, producto, qty);
         _notificar(context, '$qty agregados al carrito de $telefono');
@@ -123,8 +126,7 @@ class ItemProducto extends StatelessWidget {
     }
   }
 
-  // NUEVO: Diálogo de reabastecimiento integrado aquí para tener control del Switch
-  void _reabastecer(BuildContext context, InventarioProvider provider) async {
+  void _reabastecer(BuildContext context) async {
     final qtyCtrl = TextEditingController();
     final costoCtrl = TextEditingController(text: producto.costo.toString());
     bool afectaCaja = true;
@@ -180,13 +182,12 @@ class ItemProducto extends StatelessWidget {
       }
     );
 
-    if (resultado != null) {
+    if (resultado != null && context.mounted) {
       final int qty = resultado['cantidad'];
       final double costo = resultado['costo'];
       final bool afecta = resultado['afectaCaja'];
       
-      // NUEVO: Pasamos el parámetro afectaCaja
-      provider.reabastecerProducto(producto.id, qty, costo, afectaCaja: afecta);
+      context.read<InventarioProvider>().reabastecerProducto(producto.id, qty, costo, afectaCaja: afecta);
       _notificar(context, 'Stock actualizado exitosamente');
     }
   }

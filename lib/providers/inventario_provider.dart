@@ -1,31 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart'; 
 import '../models/producto.dart';
 import '../models/venta.dart';
 import '../models/movimiento.dart'; 
+import '../models/actividad.dart'; // <-- NUEVO IMPORT
 import '../data/storage_service.dart';
-import 'dart:math';
 
 class InventarioProvider extends ChangeNotifier {
-  
   List<Producto> _productos = [];
   List<Venta> _ventas = [];
   List<String> _categorias = ['General'];
   List<Movimiento> _movimientos = []; 
+  List<Actividad> _actividades = []; // <-- NUEVA LISTA DE BITÁCORA
+
   double _dineroEnCaja = 0.0;
   String _filtro = '';
   
   Map<String, Carrito> _carritosActivos = {};
   final StorageService _storage = StorageService();
+  final Uuid _uuid = const Uuid();
+
+  List<Map<String, dynamic>> _cacheEstadisticas = [];
+  bool _estadisticasDesactualizadas = true;
 
   InventarioProvider() {
-    _cargarDesdeDisco().then((_) {
-      // DESCOMENTA LA SIGUIENTE LÍNEA UNA SOLA VEZ:
-       sembrarDatosMaquillaje();
-    });
+    _cargarDesdeDisco();
   }
 
-  // --- GETTERS ---
+  // --- GETTERS PRINCIPALES ---
   List<Producto> get productos {
     if (_filtro.isEmpty) return _productos;
     return _productos.where((p) => p.nombre.toLowerCase().contains(_filtro.toLowerCase())).toList();
@@ -33,6 +36,8 @@ class InventarioProvider extends ChangeNotifier {
   List<Venta> get ventas => _ventas;
   List<String> get categorias => _categorias;
   List<Movimiento> get movimientos => _movimientos; 
+  List<Actividad> get actividades => _actividades; // <-- NUEVO GETTER
+
   double get dineroEnCaja => _dineroEnCaja;
   Map<String, Carrito> get carritosActivos => _carritosActivos;
 
@@ -40,8 +45,63 @@ class InventarioProvider extends ChangeNotifier {
   double get dineroPosible => _productos.fold(0, (sum, item) => sum + (item.precioVenta * item.cantidad));
   double get gananciaPotencial => dineroPosible - capitalInvertido;
 
-  // --- NUEVOS GETTERS PARA ESTADÍSTICAS MENSUALES ---
-  
+  // --- BUSINESS INSIGHTS ---
+  double get ticketPromedio {
+    if (_ventas.isEmpty) return 0.0;
+    final totalIngresos = _ventas.fold(0.0, (sum, v) => sum + v.totalFinal);
+    return totalIngresos / _ventas.length;
+  }
+
+  Map<String, dynamic>? get productoMasVendido {
+    if (_ventas.isEmpty) return null;
+    
+    final conteoVentas = <String, int>{};
+    final nombres = <String, String>{};
+
+    for (var venta in _ventas) {
+      for (var art in venta.articulos) {
+        conteoVentas[art.productoId] = (conteoVentas[art.productoId] ?? 0) + art.cantidad;
+        nombres[art.productoId] = art.productoNombre;
+      }
+    }
+
+    if (conteoVentas.isEmpty) return null;
+    final idMasVendido = conteoVentas.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+    
+    return {
+      'nombre': nombres[idMasVendido],
+      'cantidad': conteoVentas[idMasVendido],
+    };
+  }
+
+  Map<String, dynamic>? get productoMayorIngreso {
+    if (_ventas.isEmpty) return null;
+    
+    final ingresosPorProducto = <String, double>{};
+    final nombres = <String, String>{};
+
+    for (var venta in _ventas) {
+      for (var art in venta.articulos) {
+        ingresosPorProducto[art.productoId] = (ingresosPorProducto[art.productoId] ?? 0.0) + art.subtotal;
+        nombres[art.productoId] = art.productoNombre;
+      }
+    }
+
+    if (ingresosPorProducto.isEmpty) return null;
+    final idMayorIngreso = ingresosPorProducto.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+    
+    return {
+      'nombre': nombres[idMayorIngreso],
+      'ingreso': ingresosPorProducto[idMayorIngreso],
+    };
+  }
+
+  List<Producto> get productosPorAgotarse {
+    final casiAgotados = _productos.where((p) => p.cantidad > 0 && p.cantidad <= 3).toList();
+    casiAgotados.sort((a, b) => a.cantidad.compareTo(b.cantidad));
+    return casiAgotados.take(4).toList(); 
+  }
+
   double get promedioMensual {
     final stats = obtenerEstadisticasMensuales();
     if (stats.isEmpty) return 0.0;
@@ -59,7 +119,6 @@ class InventarioProvider extends ChangeNotifier {
     return actual.first['ganancia'];
   }
 
-  // --- LÓGICA DE FILTRADO, SEMANAS Y MESES ---
   List<Venta> obtenerVentasPorRango(DateTime inicio, DateTime fin) {
     final inicioDia = DateTime(inicio.year, inicio.month, inicio.day, 0, 0, 0);
     final finDelDia = DateTime(fin.year, fin.month, fin.day, 23, 59, 59);
@@ -83,6 +142,8 @@ class InventarioProvider extends ChangeNotifier {
   }
 
   List<Map<String, dynamic>> obtenerEstadisticasMensuales() {
+    if (!_estadisticasDesactualizadas) return _cacheEstadisticas;
+
     Map<String, Map<String, dynamic>> stats = {};
 
     for (var v in _ventas) {
@@ -117,10 +178,41 @@ class InventarioProvider extends ChangeNotifier {
     }).toList();
 
     listaStats.sort((a, b) => (b['fecha'] as DateTime).compareTo(a['fecha'] as DateTime));
-    return listaStats;
+    
+    _cacheEstadisticas = listaStats;
+    _estadisticasDesactualizadas = false;
+    
+    return _cacheEstadisticas;
+  }
+
+  // ==========================================================
+  // --- MOTOR DE AUDITORÍA (BITÁCORA) OPTIMIZADO ---
+  // ==========================================================
+  void _registrarActividad(String descripcion) {
+    _actividades.insert(0, Actividad(
+      id: _uuid.v4(),
+      descripcion: descripcion,
+      fecha: DateTime.now(),
+    ));
+
+    // 🚀 OPTIMIZACIÓN DE MEMORIA RAM: 
+    // Mantenemos solo los últimos 1000 registros. 
+    // Evita que el archivo JSON crezca infinitamente y congele la app al iniciar.
+    if (_actividades.length > 1000) {
+      _actividades = _actividades.sublist(0, 1000);
+    }
+
+    _storage.guardarActividades(_actividades);
+    notifyListeners(); // Notificamos para que la UI se actualice si está abierta
   }
 
   // --- ACCIONES DE INVENTARIO Y CATEGORÍAS ---
+  void limpiarBitacora() {
+    _actividades.clear();
+    _storage.guardarActividades(_actividades);
+    notifyListeners();
+  }
+
   void filtrar(String texto) {
     _filtro = texto;
     notifyListeners();
@@ -129,29 +221,18 @@ class InventarioProvider extends ChangeNotifier {
   void agregarCategoria(String nombre) {
     if (nombre.isNotEmpty && !_categorias.contains(nombre)) {
       _categorias.add(nombre);
-      _notificarYGuardar();
+      _registrarActividad('Agregó la categoría "$nombre"'); // <-- BITÁCORA
+      notifyListeners();
+      _storage.guardarCategorias(_categorias);
     }
-  }
-
-  void _notificarYGuardar() {
-    notifyListeners();
-    _storage.guardarTodo(
-      productos: _productos,
-      ventas: _ventas,
-      caja: _dineroEnCaja,
-      categorias: _categorias,
-      movimientos: _movimientos, 
-    );
-  }
-
-  void _guardarCarritos() {
-    final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
-    _storage.guardarCarritosActivos(mapAGuardar);
   }
 
   void agregarSaldoInicial(double saldo) {
     _dineroEnCaja = saldo;
-    _notificarYGuardar();
+    _estadisticasDesactualizadas = true;
+    _registrarActividad('Configuró el saldo inicial en \$${saldo.toStringAsFixed(2)}'); // <-- BITÁCORA
+    notifyListeners();
+    _storage.guardarCaja(_dineroEnCaja);
   }
 
   void agregarProducto(Producto nuevo, {bool afectaCaja = true}) {
@@ -160,27 +241,71 @@ class InventarioProvider extends ChangeNotifier {
       double gastoPorInventario = nuevo.costo * nuevo.cantidad;
       _dineroEnCaja -= gastoPorInventario;
       _movimientos.add(Movimiento(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: _uuid.v4(),
         descripcion: 'Compra inicial inventario: ${nuevo.nombre}',
         monto: gastoPorInventario,
         fecha: DateTime.now(),
         esInversion: false, 
       ));
+      
+      _storage.guardarCaja(_dineroEnCaja);
+      _storage.guardarMovimientos(_movimientos);
     }
-    _notificarYGuardar();
+    
+    _registrarActividad('Creó el producto "${nuevo.nombre}" con ${nuevo.cantidad} unidades en stock'); // <-- BITÁCORA
+    
+    _estadisticasDesactualizadas = true;
+    notifyListeners();
+    _storage.guardarProductos(_productos);
   }
 
   void editarProducto(String id, Producto editado) {
     final index = _productos.indexWhere((p) => p.id == id);
     if (index != -1) {
+      final pAntiguo = _productos[index];
+      
+      // Construimos el desglose exacto de los cambios
+      List<String> cambios = [];
+      
+      if (pAntiguo.nombre != editado.nombre) {
+        cambios.add('Nombre: "${pAntiguo.nombre}" -> "${editado.nombre}"');
+      }
+      if (pAntiguo.categoria != editado.categoria) {
+        cambios.add('Categoría: "${pAntiguo.categoria}" -> "${editado.categoria}"');
+      }
+      if (pAntiguo.costo != editado.costo) {
+        cambios.add('Costo: \$${pAntiguo.costo.toStringAsFixed(2)} -> \$${editado.costo.toStringAsFixed(2)}');
+      }
+      if (pAntiguo.precioVenta != editado.precioVenta) {
+        cambios.add('Precio: \$${pAntiguo.precioVenta.toStringAsFixed(2)} -> \$${editado.precioVenta.toStringAsFixed(2)}');
+      }
+      if (pAntiguo.cantidad != editado.cantidad) {
+        cambios.add('Stock ajustado: ${pAntiguo.cantidad} -> ${editado.cantidad}');
+      }
+
+      // Solo registramos si realmente hubo algún cambio
+      if (cambios.isNotEmpty) {
+        final detalleCambios = cambios.join(', ');
+        _registrarActividad('Editó "${pAntiguo.nombre}" | $detalleCambios');
+      }
+
       _productos[index] = editado;
-      _notificarYGuardar();
+      notifyListeners();
+      _storage.guardarProductos(_productos);
     }
   }
 
   void eliminarProducto(String id) {
-    _productos.removeWhere((p) => p.id == id);
-    _notificarYGuardar();
+    final index = _productos.indexWhere((p) => p.id == id);
+    if (index != -1) {
+      final nombre = _productos[index].nombre;
+      _productos.removeAt(index);
+      
+      _registrarActividad('Eliminó el producto "$nombre" del inventario'); // <-- BITÁCORA
+      
+      notifyListeners();
+      _storage.guardarProductos(_productos);
+    }
   }
 
   void reabastecerProducto(String id, int cantidadEntrante, double costoUnitarioEntrante, {bool afectaCaja = true}) {
@@ -188,6 +313,7 @@ class InventarioProvider extends ChangeNotifier {
     if (index != -1) {
       final prod = _productos[index];
       final int nuevoStockTotal = prod.cantidad + cantidadEntrante;
+      
       final double nuevoCostoPromedio = nuevoStockTotal > 0 
           ? ((prod.cantidad * prod.costo) + (cantidadEntrante * costoUnitarioEntrante)) / nuevoStockTotal 
           : costoUnitarioEntrante;
@@ -201,39 +327,66 @@ class InventarioProvider extends ChangeNotifier {
         double gastoPorReabastecer = costoUnitarioEntrante * cantidadEntrante;
         _dineroEnCaja -= gastoPorReabastecer;
         _movimientos.add(Movimiento(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          id: _uuid.v4(),
           descripcion: 'Reabastecimiento: ${prod.nombre} ($cantidadEntrante uds)',
           monto: gastoPorReabastecer,
           fecha: DateTime.now(),
           esInversion: false, 
         ));
+        
+        _storage.guardarCaja(_dineroEnCaja);
+        _storage.guardarMovimientos(_movimientos);
       }
-      _notificarYGuardar();
+      
+      // Registro ultra detallado
+      _registrarActividad(
+        'Reabasteció "${prod.nombre}" (+$cantidadEntrante). '
+        'Stock: ${prod.cantidad} -> $nuevoStockTotal. '
+        'Costo prom: \$${prod.costo.toStringAsFixed(2)} -> \$${nuevoCostoPromedio.toStringAsFixed(2)}'
+      );
+
+      _estadisticasDesactualizadas = true;
+      notifyListeners();
+      _storage.guardarProductos(_productos);
     }
   }
 
   void registrarGasto(double monto, String descripcion) {
     _dineroEnCaja -= monto;
+    final nombreDesc = descripcion.isEmpty ? 'Gasto general' : descripcion;
     _movimientos.add(Movimiento(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      descripcion: descripcion.isEmpty ? 'Gasto general' : descripcion,
+      id: _uuid.v4(),
+      descripcion: nombreDesc,
       monto: monto,
       fecha: DateTime.now(),
       esInversion: false,
     ));
-    _notificarYGuardar();
+    
+    _registrarActividad('Registró un gasto de \$${monto.toStringAsFixed(2)} por "$nombreDesc"'); // <-- BITÁCORA
+
+    _estadisticasDesactualizadas = true;
+    notifyListeners();
+    _storage.guardarCaja(_dineroEnCaja);
+    _storage.guardarMovimientos(_movimientos);
   }
 
   void registrarInversion(double monto, String descripcion) {
     _dineroEnCaja += monto;
+    final nombreDesc = descripcion.isEmpty ? 'Inversión' : descripcion;
     _movimientos.add(Movimiento(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      descripcion: descripcion.isEmpty ? 'Inversión' : descripcion,
+      id: _uuid.v4(),
+      descripcion: nombreDesc,
       monto: monto,
       fecha: DateTime.now(),
       esInversion: true,
     ));
-    _notificarYGuardar();
+    
+    _registrarActividad('Registró un ingreso/inversión de \$${monto.toStringAsFixed(2)} por "$nombreDesc"'); // <-- BITÁCORA
+
+    _estadisticasDesactualizadas = true;
+    notifyListeners();
+    _storage.guardarCaja(_dineroEnCaja);
+    _storage.guardarMovimientos(_movimientos);
   }
 
   // --- LÓGICA DE CARRITOS Y VENTAS ---
@@ -267,28 +420,52 @@ class InventarioProvider extends ChangeNotifier {
 
     _productos[indexProducto] = producto.copyWith(cantidad: producto.cantidad - cantidad);
     
-    _guardarCarritos();
-    _notificarYGuardar(); 
+    _registrarActividad('Apartó ${cantidad}x "${producto.nombre}" en el carrito de "$telefono"'); // <-- BITÁCORA
+
+    notifyListeners();
+    
+    _storage.guardarProductos(_productos);
+    final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+    _storage.guardarCarritosActivos(mapAGuardar);
   }
 
   void aplicarDescuentoACarrito(String identificador, double valor, bool esPorcentaje) {
     if (_carritosActivos.containsKey(identificador)) {
-      _carritosActivos[identificador]!.descuentoValor = valor;
-      _carritosActivos[identificador]!.descuentoEsPorcentaje = esPorcentaje;
+      final carrito = _carritosActivos[identificador]!;
+      final descuentoAnterior = carrito.descuentoEsPorcentaje 
+          ? '${carrito.descuentoValor}%' 
+          : '\$${carrito.descuentoValor.toStringAsFixed(2)}';
       
-      _guardarCarritos();
+      final descuentoNuevo = esPorcentaje 
+          ? '$valor%' 
+          : '\$${valor.toStringAsFixed(2)}';
+
+      carrito.descuentoValor = valor;
+      carrito.descuentoEsPorcentaje = esPorcentaje;
+      
+      if (valor == 0) {
+        _registrarActividad('Eliminó el descuento del apartado de "$identificador"');
+      } else {
+        _registrarActividad('Cambió descuento en apartado de "$identificador": $descuentoAnterior -> $descuentoNuevo');
+      }
+
       notifyListeners();
+      final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+      _storage.guardarCarritosActivos(mapAGuardar);
     }
   }
 
-  // <-- ACTUALIZADO: Ahora recibe el string con el concepto
   void aplicarCargoExtraACarrito(String identificador, double cargo, String concepto) {
     if (_carritosActivos.containsKey(identificador)) {
       _carritosActivos[identificador]!.cargoExtra = cargo;
-      _carritosActivos[identificador]!.conceptoCargoExtra = concepto.isEmpty ? 'Cargo Extra' : concepto; // Por si lo dejan vacío
+      final desc = concepto.isEmpty ? 'Cargo Extra' : concepto;
+      _carritosActivos[identificador]!.conceptoCargoExtra = desc;
       
-      _guardarCarritos();
+      _registrarActividad('Aplicó un cargo de \$${cargo.toStringAsFixed(2)} por "$desc" al carrito de "$identificador"'); // <-- BITÁCORA
+
       notifyListeners();
+      final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+      _storage.guardarCarritosActivos(mapAGuardar);
     }
   }
 
@@ -297,12 +474,12 @@ class InventarioProvider extends ChangeNotifier {
 
     final carrito = _carritosActivos[identificador]!;
     final nuevaVenta = Venta(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: _uuid.v4(),
       telefonoCliente: carrito.telefonoCliente,
       articulos: List.from(carrito.articulos),
       descuentoAplicado: carrito.descuentoMonto,
       cargoExtra: carrito.cargoExtra, 
-      conceptoCargoExtra: carrito.conceptoCargoExtra, // <-- SE GUARDA EL NOMBRE
+      conceptoCargoExtra: carrito.conceptoCargoExtra,
       totalFinal: carrito.total,
       fecha: DateTime.now(),
     );
@@ -311,8 +488,15 @@ class InventarioProvider extends ChangeNotifier {
     _dineroEnCaja += nuevaVenta.totalFinal;
     _carritosActivos.remove(identificador);
     
-    _guardarCarritos();
-    _notificarYGuardar();
+    _registrarActividad('Cobró el carrito de "$identificador" por un total de \$${nuevaVenta.totalFinal.toStringAsFixed(2)}'); // <-- BITÁCORA
+
+    _estadisticasDesactualizadas = true;
+    notifyListeners();
+    
+    _storage.guardarVentas(_ventas);
+    _storage.guardarCaja(_dineroEnCaja);
+    final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+    _storage.guardarCarritosActivos(mapAGuardar);
   }
 
   void cancelarCarrito(String identificador) {
@@ -329,8 +513,13 @@ class InventarioProvider extends ChangeNotifier {
     }
     _carritosActivos.remove(identificador);
     
-    _guardarCarritos();
-    _notificarYGuardar();
+    _registrarActividad('Canceló el apartado de "$identificador" y devolvió los productos al inventario'); // <-- BITÁCORA
+
+    notifyListeners();
+    
+    _storage.guardarProductos(_productos);
+    final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+    _storage.guardarCarritosActivos(mapAGuardar);
   }
 
   void revertirVenta(String idVenta) {
@@ -349,130 +538,15 @@ class InventarioProvider extends ChangeNotifier {
 
     _dineroEnCaja -= ventaARevertir.totalFinal;
     _ventas.removeAt(indexVenta);
-    _notificarYGuardar();
-  }
-
-  // =========================================================================
-  // --- MÉTODOS DE PRUEBA Y SIMULACIÓN (SEMBRAR DATOS MASIVOS) ---
-  // =========================================================================
-  void sembrarDatosMaquillaje() {
-    final random = Random();
     
-    final fechaInicio = DateTime(2026, 1, 1);
-    final fechaFin = DateTime(2026, 8, 7, 23, 59, 59);
-    final diasTotales = fechaFin.difference(fechaInicio).inDays;
+    _registrarActividad('Revirtió la venta hecha a "${ventaARevertir.telefonoCliente}" de \$${ventaARevertir.totalFinal.toStringAsFixed(2)}'); // <-- BITÁCORA
 
-    _categorias = ['Rostro', 'Ojos', 'Labios', 'Skincare', 'Herramientas'];
+    _estadisticasDesactualizadas = true;
+    notifyListeners();
 
-    _productos = [
-      Producto(id: 'p1', nombre: 'Sheglam Color Bloom Liquid Blush', categoria: 'Rostro', costo: 85.0, precioVenta: 180.0, cantidad: 25),
-      Producto(id: 'p2', nombre: 'Elf Power Grip Primer', categoria: 'Rostro', costo: 160.0, precioVenta: 290.0, cantidad: 12),
-      Producto(id: 'p3', nombre: 'Beauty Creations Flora Palette', categoria: 'Ojos', costo: 190.0, precioVenta: 350.0, cantidad: 8),
-      Producto(id: 'p4', nombre: 'Sheglam Insta-Ready Face Powder', categoria: 'Rostro', costo: 110.0, precioVenta: 220.0, cantidad: 15),
-      Producto(id: 'p5', nombre: 'Bissu Tintaline Negro', categoria: 'Ojos', costo: 45.0, precioVenta: 90.0, cantidad: 30),
-      Producto(id: 'p6', nombre: 'Elf Halo Glow Liquid Filter', categoria: 'Rostro', costo: 280.0, precioVenta: 450.0, cantidad: 10),
-      Producto(id: 'p7', nombre: 'Beauty Creations Plump & Pout Gloss', categoria: 'Labios', costo: 75.0, precioVenta: 150.0, cantidad: 20),
-      Producto(id: 'p8', nombre: 'Set Brochas Neon Beauty Creations', categoria: 'Herramientas', costo: 250.0, precioVenta: 480.0, cantidad: 5),
-      Producto(id: 'p9', nombre: 'Esponja Blender Sheglam', categoria: 'Herramientas', costo: 35.0, precioVenta: 80.0, cantidad: 40),
-      Producto(id: 'p10', nombre: 'Good Molecules Niacinamide Toner', categoria: 'Skincare', costo: 180.0, precioVenta: 360.0, cantidad: 18),
-    ];
-
-    _ventas = [];
-    double ingresosTotalesVentas = 0;
-    List<String> telefonosClientes = ['@paola_makeup', '8331112233', 'Maria Gonzalez', '8334445566', '@beauty_fan']; 
-
-    for (int i = 0; i < 220; i++) {
-      final diasRandom = random.nextInt(diasTotales > 0 ? diasTotales : 1);
-      final horaRandom = random.nextInt(10) + 9; 
-      final minRandom = random.nextInt(60);
-      
-      DateTime fechaVenta = fechaInicio.add(Duration(days: diasRandom));
-      fechaVenta = DateTime(fechaVenta.year, fechaVenta.month, fechaVenta.day, horaRandom, minRandom);
-      
-      if (fechaVenta.isAfter(fechaFin)) fechaVenta = fechaFin;
-
-      int numArticulos = random.nextInt(3) + 1;
-      List<ArticuloVenta> articulosVenta = [];
-      double subtotalVenta = 0;
-      
-      List<Producto> poolProductos = List.from(_productos)..shuffle(random);
-      
-      for (int j = 0; j < numArticulos; j++) {
-        Producto p = poolProductos[j];
-        int cantComprada = random.nextInt(2) + 1;
-        
-        articulosVenta.add(ArticuloVenta(
-          productoId: p.id,
-          productoNombre: p.nombre,
-          cantidad: cantComprada,
-          precioUnitario: p.precioVenta,
-        ));
-        subtotalVenta += (cantComprada * p.precioVenta);
-      }
-
-      double descuento = random.nextDouble() > 0.90 ? (random.nextBool() ? 20.0 : 50.0) : 0.0;
-      double cargoExtra = random.nextDouble() > 0.80 ? 60.0 : 0.0; 
-      
-      // <-- NUEVO: Generando nombres aleatorios para el cargo extra en la siembra
-      String conceptoCargoExtra = cargoExtra > 0 ? (random.nextBool() ? 'Costo de envío' : 'Envoltura de regalo') : 'Cargo Extra';
-
-      double totalFinal = (subtotalVenta - descuento) + cargoExtra;
-      if (totalFinal < 0) totalFinal = 0;
-      
-      ingresosTotalesVentas += totalFinal;
-
-      _ventas.add(Venta(
-        id: 'v_prod_$i',
-        telefonoCliente: telefonosClientes[random.nextInt(telefonosClientes.length)],
-        articulos: articulosVenta,
-        descuentoAplicado: descuento,
-        cargoExtra: cargoExtra, 
-        conceptoCargoExtra: conceptoCargoExtra, // <-- SE REGISTRA
-        totalFinal: totalFinal,
-        fecha: fechaVenta,
-      ));
-    }
-
-    _ventas.sort((a, b) => a.fecha.compareTo(b.fecha));
-
-    _movimientos = [];
-    double egresosTotalesGastos = 0;
-
-    _movimientos.add(Movimiento(
-      id: 'm_inicial',
-      descripcion: 'Capital Inicial de Caja (Enero)',
-      monto: 15000.0,
-      fecha: DateTime(2026, 1, 1, 10, 0),
-      esInversion: true,
-    ));
-
-    List<String> tiposDeGastos = [
-      'Restock mayorista Beauty Creations',
-      'Insumos de empaque, bolsas y stickers',
-      'Importación de cosméticos Elf y Sheglam',
-      'Publicidad en Meta Ads (Instagram/FB)',
-      'Cosméticos Bissú al mayoreo'
-    ];
-
-    for (int mes = 1; mes <= 8; mes++) {
-      int gastosPorMes = (mes == 8) ? 1 : 2; 
-      
-      for (int g = 0; g < gastosPorMes; g++) {
-        double montoGasto = 500.0 + random.nextInt(2500);
-        egresosTotalesGastos += montoGasto;
-        
-        _movimientos.add(Movimiento(
-          id: 'm_gasto_${mes}_$g',
-          descripcion: tiposDeGastos[random.nextInt(tiposDeGastos.length)],
-          monto: montoGasto,
-          fecha: DateTime(2026, mes, random.nextInt(6) + 1, 12, 0),
-          esInversion: false,
-        ));
-      }
-    }
-
-    _dineroEnCaja = 15000.0 + ingresosTotalesVentas - egresosTotalesGastos;
-    _notificarYGuardar();
+    _storage.guardarProductos(_productos);
+    _storage.guardarVentas(_ventas);
+    _storage.guardarCaja(_dineroEnCaja);
   }
 
   Future<void> _cargarDesdeDisco() async {
@@ -481,10 +555,14 @@ class InventarioProvider extends ChangeNotifier {
     _dineroEnCaja = await _storage.cargarCaja();
     _categorias = await _storage.cargarCategorias();
     _movimientos = await _storage.cargarMovimientos();
+    
+    // <-- CARGAMOS LA BITÁCORA
+    _actividades = await _storage.cargarActividades();
 
     final carritosRaw = await _storage.cargarCarritosActivos();
     _carritosActivos = carritosRaw.map((key, value) => MapEntry(key, Carrito.fromMap(value)));
 
+    _estadisticasDesactualizadas = true;
     notifyListeners();
   }
 }

@@ -7,14 +7,17 @@ import '../../providers/inventario_provider.dart';
 class TarjetaVentaHistorial extends StatelessWidget {
   final Venta venta;
 
+  // 🚀 OPTIMIZACIÓN: Formateador en memoria única
+  static final DateFormat _dateFormatter = DateFormat('dd/MM/yyyy - hh:mm a');
+
   const TarjetaVentaHistorial({super.key, required this.venta});
 
   @override
   Widget build(BuildContext context) {
-    // Calculamos el total de artículos sumando las cantidades de cada artículo en la lista
     final int totalArticulos = venta.articulos.fold(0, (sum, item) => sum + item.cantidad);
 
     return Card(
+      key: ValueKey(venta.id), // <-- Mantiene estable el acordeón al hacer scroll
       elevation: 2,
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -29,23 +32,32 @@ class TarjetaVentaHistorial extends StatelessWidget {
           children: [
             Text('$totalArticulos artículos en total'),
             Text(
-              DateFormat('dd/MM/yyyy - hh:mm a').format(venta.fecha),
+              _dateFormatter.format(venta.fecha),
               style: const TextStyle(fontSize: 11, color: Colors.grey),
             ),
           ],
         ),
-        trailing: Text('+\$${venta.totalFinal.toStringAsFixed(2)}', 
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16)),
+        trailing: Text(
+          '+\$${venta.totalFinal.toStringAsFixed(2)}', 
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16),
+        ),
         children: [
           const Divider(),
-          // Listamos los artículos que se vendieron
           ...venta.articulos.map((articulo) => Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('${articulo.cantidad}x ${articulo.productoNombre}', style: const TextStyle(fontSize: 13)),
-                Text('\$${articulo.subtotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                Expanded(
+                  child: Text(
+                    '${articulo.cantidad}x ${articulo.productoNombre}', 
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                Text(
+                  '\$${articulo.subtotal.toStringAsFixed(2)}', 
+                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                ),
               ],
             ),
           )),
@@ -61,14 +73,29 @@ class TarjetaVentaHistorial extends StatelessWidget {
                 ],
               ),
             ),
+
+          if (venta.cargoExtra > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('${venta.conceptoCargoExtra}:', style: const TextStyle(fontSize: 13, color: Colors.blue)),
+                  Text('+\$${venta.cargoExtra.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, color: Colors.blue)),
+                ],
+              ),
+            ),
           
-          // Botón para revertir la venta
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: TextButton.icon(
               icon: const Icon(Icons.settings_backup_restore, color: Colors.redAccent),
               label: const Text('Revertir Venta', style: TextStyle(color: Colors.redAccent)),
-              onPressed: () => _confirmarReversion(context, venta),
+              // Capturamos el provider aquí de forma segura antes de abrir diálogos
+              onPressed: () {
+                final provider = context.read<InventarioProvider>();
+                _confirmarReversion(context, venta, provider);
+              },
             ),
           )
         ],
@@ -76,8 +103,7 @@ class TarjetaVentaHistorial extends StatelessWidget {
     );
   }
 
-  // Doble confirmación para revertir
-  void _confirmarReversion(BuildContext context, Venta venta) {
+  void _confirmarReversion(BuildContext context, Venta venta, InventarioProvider provider) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -88,8 +114,8 @@ class TarjetaVentaHistorial extends StatelessWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () {
-              Navigator.pop(ctx); // Cierra el primer diálogo
-              _segundaConfirmacion(context, venta); // Abre el segundo
+              Navigator.pop(ctx); 
+              _segundaConfirmacion(context, venta, provider); 
             },
             child: const Text('Sí, revertir'),
           ),
@@ -98,7 +124,7 @@ class TarjetaVentaHistorial extends StatelessWidget {
     );
   }
 
-  void _segundaConfirmacion(BuildContext context, Venta venta) {
+  void _segundaConfirmacion(BuildContext context, Venta venta, InventarioProvider provider) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -109,9 +135,13 @@ class TarjetaVentaHistorial extends StatelessWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () {
-              context.read<InventarioProvider>().revertirVenta(venta.id);
+              provider.revertirVenta(venta.id);
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Venta revertida exitosamente')));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Venta revertida exitosamente'))
+                );
+              }
             },
             child: const Text('CONFIRMAR'),
           ),

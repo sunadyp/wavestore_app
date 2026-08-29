@@ -14,52 +14,55 @@ class PdfService {
     final rosaPastel = PdfColor.fromHex('#FCE4EC');
     final grisOscuro = PdfColor.fromHex('#424242');
 
-    // Intentamos cargar el logo, si no existe usamos un icono de texto
+    // 🚀 CORRECCIÓN: Estaba mal escrito el formato de la imagen (.jog -> .jpg)
     pw.Widget logo;
     try {
-      final ByteData logoData = await rootBundle.load('assets/logo.jog');
+      final ByteData logoData = await rootBundle.load('assets/logo.jpg');
       final Uint8List logoBytes = logoData.buffer.asUint8List();
-      logo = pw.Image(pw.MemoryImage(logoBytes), width: 45);
+      logo = pw.Image(pw.MemoryImage(logoBytes), width: 55); // Un poco más grande para que destaque
     } catch (e) {
-      logo = pw.Text("", style: const pw.TextStyle(fontSize: 30));
+      logo = pw.Text("WAVE", style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: rosaFuerte));
     }
 
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.roll80,
-        margin: pw.EdgeInsets.zero, // Quitamos margen para las ondas
+        margin: pw.EdgeInsets.zero, // Quitamos margen para el diseño de borde a borde
         build: (pw.Context context) {
           return pw.Column(
             children: [
-              // Borde ondulado superior (Simulado con fondo rosa)
+              // Borde superior (Simulado con fondo rosa)
               pw.Container(
-                height: 10,
+                height: 12,
                 width: double.infinity,
                 decoration: pw.BoxDecoration(color: rosaPastel),
               ),
               
               pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: pw.Column(
                   children: [
                     // Encabezado con Logo y Estilo
                     pw.Center(child: logo),
-                    pw.SizedBox(height: 5),
+                    pw.SizedBox(height: 6),
                     pw.Text('WAVE STORE', 
-                      style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: rosaFuerte)),
-                    pw.Text('Ticket de Compra', style: pw.TextStyle(fontSize: 10, color: grisOscuro)),
+                      style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: rosaFuerte, letterSpacing: 1.5)),
+                    pw.Text('Ticket de Compra', style: pw.TextStyle(fontSize: 11, color: grisOscuro)),
                     
-                    pw.SizedBox(height: 10),
+                    pw.SizedBox(height: 12),
                     pw.Divider(color: rosaFuerte, thickness: 0.5),
+                    pw.SizedBox(height: 4),
                     
-                    // Info Cliente con Iconos
+                    // Info Cliente
                     pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
                         pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
                             pw.Text('Cliente: ${carrito.telefonoCliente}', 
-                              style: pw.TextStyle(fontSize: 9, color: grisOscuro)),
+                              style: pw.TextStyle(fontSize: 10, color: grisOscuro, fontWeight: pw.FontWeight.bold)),
+                            pw.SizedBox(height: 2),
                             pw.Text('Fecha: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}', 
                               style: pw.TextStyle(fontSize: 9, color: grisOscuro)),
                           ],
@@ -72,66 +75,76 @@ class PdfService {
                     // Franja de Productos
                     pw.Container(
                       width: double.infinity,
-                      padding: const pw.EdgeInsets.all(3),
+                      padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
                       color: rosaPastel,
-                      child: pw.Text('PRODUCTOS', 
+                      child: pw.Text('CANT.   PRODUCTO   -   SUBTOTAL', 
                         style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: rosaFuerte)),
                     ),
-                    pw.SizedBox(height: 5),
+                    pw.SizedBox(height: 8),
 
                     // Lista de Artículos
                     ...carrito.articulos.map((art) {
                       return pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                        padding: const pw.EdgeInsets.only(bottom: 6),
                         child: pw.Row(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                           children: [
-                            pw.Text('${art.cantidad}x ${art.productoNombre}', 
-                              style: const pw.TextStyle(fontSize: 9)),
+                            pw.Expanded(
+                              child: pw.Text('${art.cantidad}x ${art.productoNombre}', 
+                                style: const pw.TextStyle(fontSize: 10)),
+                            ),
                             pw.Text('\$${art.subtotal.toStringAsFixed(2)}', 
-                              style: const pw.TextStyle(fontSize: 9)),
+                              style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
                       );
-                    }).toList(),
+                    }),
 
-                    pw.SizedBox(height: 5),
+                    pw.SizedBox(height: 6),
                     pw.Divider(color: rosaPastel, borderStyle: pw.BorderStyle.dashed),
+                    pw.SizedBox(height: 6),
                     
                     // Totales (Subtotal)
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('Subtotal:', style: const pw.TextStyle(fontSize: 9)),
-                        pw.Text('\$${carrito.subtotal.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
+                        pw.Text('Subtotal:', style: const pw.TextStyle(fontSize: 10)),
+                        pw.Text('\$${carrito.subtotal.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 10)),
                       ]
                     ),
                     
                     // Descuento (Si aplica)
                     if (carrito.descuentoMonto > 0)
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text('Descuento:', style: const pw.TextStyle(fontSize: 9)),
-                          pw.Text('-\$${carrito.descuentoMonto.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
-                        ]
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(top: 4),
+                        child: pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text('Descuento:', style: const pw.TextStyle(fontSize: 10)),
+                            pw.Text('-\$${carrito.descuentoMonto.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 10)),
+                          ]
+                        ),
                       ),
                       
-                    // <-- NUEVO: Desglose del Cargo Extra Personalizado
+                    // Cargo Extra Personalizado
                     if (carrito.cargoExtra > 0)
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text('${carrito.conceptoCargoExtra}:', style: const pw.TextStyle(fontSize: 9)),
-                          pw.Text('+\$${carrito.cargoExtra.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
-                        ]
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(top: 4),
+                        child: pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text('${carrito.conceptoCargoExtra}:', style: const pw.TextStyle(fontSize: 10)),
+                            pw.Text('+\$${carrito.cargoExtra.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 10)),
+                          ]
+                        ),
                       ),
 
-                    pw.SizedBox(height: 10),
+                    pw.SizedBox(height: 12),
                     
                     // Cuadro de Total a Pagar
                     pw.Container(
-                      padding: const pw.EdgeInsets.all(6),
+                      padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 10),
                       decoration: pw.BoxDecoration(
                         color: rosaPastel,
                         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
@@ -139,30 +152,31 @@ class PdfService {
                       child: pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
-                          pw.Text('TOTAL A PAGAR', 
-                            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: rosaFuerte)),
+                          pw.Text('TOTAL', 
+                            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: rosaFuerte)),
                           pw.Text('\$${carrito.total.toStringAsFixed(2)}', 
-                            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: rosaFuerte)),
+                            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: rosaFuerte)),
                         ]
                       ),
                     ),
 
-                    pw.SizedBox(height: 20),
+                    pw.SizedBox(height: 24),
                     pw.Text('¡Gracias por tu compra!', 
-                      style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic, color: rosaFuerte)),
-                    pw.Text('', style: pw.TextStyle(fontSize: 10, color: rosaFuerte)),
-                    pw.Text('Vuelve pronto', style: pw.TextStyle(fontSize: 8, color: grisOscuro)),
+                      style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic, color: rosaFuerte, fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 4),
+                    // Espacio para redes sociales
+                    pw.Text('@wave_store', style: pw.TextStyle(fontSize: 10, color: grisOscuro)),
                     
-                    pw.SizedBox(height: 10),
-                    pw.Text('N° Ticket: #WAVE-${DateTime.now().millisecondsSinceEpoch.toString().substring(9)}', 
-                      style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+                    pw.SizedBox(height: 16),
+                    pw.Text('N° Ticket: #WV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}', 
+                      style: pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
                   ],
                 ),
               ),
 
-              // Borde ondulado inferior
+              // Borde inferior
               pw.Container(
-                height: 10,
+                height: 12,
                 width: double.infinity,
                 decoration: pw.BoxDecoration(color: rosaPastel),
               ),
@@ -175,7 +189,7 @@ class PdfService {
     // Mantiene la funcionalidad de compartir directamente
     await Printing.sharePdf(
       bytes: await pdf.save(),
-      filename: 'Ticket_WaveStore_${carrito.telefonoCliente}.pdf',
+      filename: 'Ticket_WaveStore_${carrito.telefonoCliente.replaceAll(" ", "_")}.pdf', // Limpiamos espacios en el nombre del archivo
     );
   }
 }
