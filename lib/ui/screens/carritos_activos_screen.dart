@@ -4,13 +4,32 @@ import '../../providers/inventario_provider.dart';
 import '../../services/pdf_service.dart';
 import '../../models/venta.dart'; 
 
-class CarritosActivosScreen extends StatelessWidget {
+class CarritosActivosScreen extends StatefulWidget {
   const CarritosActivosScreen({super.key});
+
+  @override
+  State<CarritosActivosScreen> createState() => _CarritosActivosScreenState();
+}
+
+class _CarritosActivosScreenState extends State<CarritosActivosScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<InventarioProvider>();
     final carritos = provider.carritosActivos;
+
+    final carritosFiltrados = carritos.entries.where((entry) {
+      final cliente = entry.key.toLowerCase();
+      return cliente.contains(_searchQuery.toLowerCase());
+    }).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -18,134 +37,184 @@ class CarritosActivosScreen extends StatelessWidget {
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
       ),
-      body: carritos.isEmpty
-          ? const Center(
-              child: Text(
-                'No hay carritos activos en este momento.',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: carritos.length,
-              itemBuilder: (context, index) {
-                final telefono = carritos.keys.elementAt(index);
-                final carrito = carritos[telefono]!;
-
-                return Card(
-                  elevation: 3,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  child: ExpansionTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Colors.green,
-                      child: Icon(Icons.shopping_cart, color: Colors.white),
-                    ),
-                    title: Text('Clienta: $telefono', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Total: \$${carrito.total.toStringAsFixed(2)} | Artículos: ${carrito.articulos.length}'),
-                    children: [
-                      const Divider(),
-                      // Lista de artículos en este carrito
-                      ...carrito.articulos.map((articulo) => ListTile(
-                            dense: true,
-                            title: Text(articulo.productoNombre),
-                            trailing: Text('${articulo.cantidad} x \$${articulo.precioUnitario}'),
-                          )),
-                      const Divider(),
-                      
-                      // Sección de Totales y Descuento
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Subtotal: \$${carrito.subtotal.toStringAsFixed(2)}'),
-                                
-                                if (carrito.descuentoMonto > 0)
-                                  Text(
-                                    'Descuento ${carrito.descuentoEsPorcentaje ? '(${carrito.descuentoValor.toInt()}%)' : ''}: -\$${carrito.descuentoMonto.toStringAsFixed(2)}', 
-                                    style: const TextStyle(color: Colors.red)
-                                  ),
-                                  
-                                Text('Total a cobrar: \$${carrito.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              ],
-                            ),
-                            TextButton.icon(
-                              icon: const Icon(Icons.local_offer),
-                              label: const Text('Descuento'),
-                              onPressed: () => _mostrarDialogoDescuento(context, provider, telefono, carrito),
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      // Botones de acción final
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            // Botón de Cancelar
-                            IconButton(
-                              tooltip: 'Cancelar y devolver inventario',
-                              icon: const Icon(Icons.remove_shopping_cart, color: Colors.red),
-                              onPressed: () => _confirmarCancelacion(context, provider, telefono),
-                            ),
-                            
-                            // Botón para generar y mandar el PDF
-                            OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(foregroundColor: Colors.blue),
-                              icon: const Icon(Icons.receipt),
-                              label: const Text('Mandar Ticket'),
-                              onPressed: () async {
-                                await PdfService.generarYCompartirTicket(carrito);
-                              },
-                            ),
-
-                            // ACTUALIZADO: Botón de Cobrar con doble confirmación
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                              icon: const Icon(Icons.check),
-                              label: const Text('Cobrar'),
-                              onPressed: () => _confirmarCobro(context, provider, telefono, carrito.total),
-                            ),
-                          ],
-                        ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Buscar por teléfono, nombre o @usuario...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            _searchQuery = '';
+                          });
+                        },
                       )
-                    ],
-                  ),
-                );
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
               },
             ),
+          ),
+          
+          Expanded(
+            child: carritosFiltrados.isEmpty
+                ? Center(
+                    child: Text(
+                      _searchQuery.isEmpty
+                          ? 'No hay carritos activos en este momento.'
+                          : 'No se encontraron apartados para "$_searchQuery".',
+                      style: const TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: carritosFiltrados.length,
+                    itemBuilder: (context, index) {
+                      final entry = carritosFiltrados[index];
+                      final identificadorCliente = entry.key;
+                      final carrito = entry.value;
+
+                      return Card(
+                        elevation: 3,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        child: ExpansionTile(
+                          leading: const CircleAvatar(
+                            backgroundColor: Colors.green,
+                            child: Icon(Icons.shopping_cart, color: Colors.white),
+                          ),
+                          title: Text('Clienta: $identificadorCliente', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('Total: \$${carrito.total.toStringAsFixed(2)} | Artículos: ${carrito.articulos.length}'),
+                          children: [
+                            const Divider(),
+                            ...carrito.articulos.map((articulo) => ListTile(
+                                  dense: true,
+                                  title: Text(articulo.productoNombre),
+                                  trailing: Text('${articulo.cantidad} x \$${articulo.precioUnitario}'),
+                                )),
+                            const Divider(),
+                            
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Subtotal: \$${carrito.subtotal.toStringAsFixed(2)}'),
+                                      
+                                      if (carrito.descuentoMonto > 0)
+                                        Text(
+                                          'Descuento ${carrito.descuentoEsPorcentaje ? '(${carrito.descuentoValor.toInt()}%)' : ''}: -\$${carrito.descuentoMonto.toStringAsFixed(2)}', 
+                                          style: const TextStyle(color: Colors.red)
+                                        ),
+                                      
+                                      // <-- ACTUALIZADO: Muestra el nombre personalizado que escribiste
+                                      if (carrito.cargoExtra > 0)
+                                        Text(
+                                          '${carrito.conceptoCargoExtra}: +\$${carrito.cargoExtra.toStringAsFixed(2)}', 
+                                          style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w500)
+                                        ),
+                                        
+                                      const SizedBox(height: 4),
+                                      Text('Total a cobrar: \$${carrito.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    ],
+                                  ),
+                                  
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      TextButton.icon(
+                                        icon: const Icon(Icons.local_offer, size: 18),
+                                        label: const Text('Descuento'),
+                                        onPressed: () => _mostrarDialogoDescuento(context, provider, identificadorCliente, carrito),
+                                      ),
+                                      TextButton.icon(
+                                        icon: const Icon(Icons.add_box, size: 18),
+                                        label: const Text('Cargo Extra'),
+                                        onPressed: () => _mostrarDialogoCargoExtra(context, provider, identificadorCliente, carrito),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Cancelar y devolver inventario',
+                                    icon: const Icon(Icons.remove_shopping_cart, color: Colors.red),
+                                    onPressed: () => _confirmarCancelacion(context, provider, identificadorCliente),
+                                  ),
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(foregroundColor: Colors.blue),
+                                    icon: const Icon(Icons.receipt),
+                                    label: const Text('Mandar Ticket'),
+                                    onPressed: () async {
+                                      await PdfService.generarYCompartirTicket(carrito);
+                                    },
+                                  ),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                                    icon: const Icon(Icons.check),
+                                    label: const Text('Cobrar'),
+                                    onPressed: () => _confirmarCobro(context, provider, identificadorCliente, carrito.total),
+                                  ),
+                                ],
+                              ),
+                            )
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
-  // <-- NUEVO: Diálogo de doble confirmación para cobrar
-  void _confirmarCobro(BuildContext context, InventarioProvider provider, String telefono, double totalFinal) {
+  void _confirmarCobro(BuildContext context, InventarioProvider provider, String identificador, double totalFinal) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Confirmar Cobro'),
         content: Text('¿Estás seguro de cobrar este apartado por un total de \$${totalFinal.toStringAsFixed(2)}?'),
         actions: [
-          TextButton(
+          WidgetKeyFix.textButton(
             onPressed: () => Navigator.pop(ctx), 
             child: const Text('Revisar', style: TextStyle(color: Colors.grey))
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
             onPressed: () {
-              provider.cobrarCarrito(telefono);
-              Navigator.pop(ctx); // Cerrar el diálogo
+              provider.cobrarCarrito(identificador);
+              Navigator.pop(ctx); 
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Venta de $telefono cobrada con éxito')),
+                SnackBar(content: Text('Venta de $identificador cobrada con éxito')),
               );
             },
             child: const Text('Sí, cobrar'),
@@ -155,7 +224,7 @@ class CarritosActivosScreen extends StatelessWidget {
     );
   }
 
-  void _mostrarDialogoDescuento(BuildContext context, InventarioProvider provider, String telefono, Carrito carrito) {
+  void _mostrarDialogoDescuento(BuildContext context, InventarioProvider provider, String identificador, Carrito carrito) {
     final ctrl = TextEditingController(text: carrito.descuentoValor > 0 ? carrito.descuentoValor.toString() : '');
     bool esPorcentaje = carrito.descuentoEsPorcentaje;
     
@@ -206,7 +275,7 @@ class CarritosActivosScreen extends StatelessWidget {
                 ),
                 onPressed: () {
                   final valor = double.tryParse(ctrl.text) ?? 0.0;
-                  provider.aplicarDescuentoACarrito(telefono, valor, esPorcentaje);
+                  provider.aplicarDescuentoACarrito(identificador, valor, esPorcentaje);
                   Navigator.pop(ctx);
                 },
                 child: const Text('Aplicar'),
@@ -218,7 +287,62 @@ class CarritosActivosScreen extends StatelessWidget {
     );
   }
 
-  void _confirmarCancelacion(BuildContext context, InventarioProvider provider, String telefono) {
+  // <-- ACTUALIZADO: Diálogo con 2 cajas de texto para Nombre y Monto
+  void _mostrarDialogoCargoExtra(BuildContext context, InventarioProvider provider, String identificador, Carrito carrito) {
+    final montoCtrl = TextEditingController(text: carrito.cargoExtra > 0 ? carrito.cargoExtra.toString() : '');
+    final conceptoCtrl = TextEditingController(text: carrito.cargoExtra > 0 ? carrito.conceptoCargoExtra : '');
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Agregar Cargo Extra'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Ingresa el concepto y el monto adicional (ej. Envío).'),
+            const SizedBox(height: 15),
+            TextField(
+              controller: conceptoCtrl,
+              textCapitalization: TextCapitalization.sentences, // Empieza con mayúscula
+              decoration: const InputDecoration(
+                labelText: 'Concepto (Ej. Envío, Envoltura)',
+                prefixIcon: Icon(Icons.edit),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: montoCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Monto del cargo',
+                prefixText: '\$ ',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              final valor = double.tryParse(montoCtrl.text) ?? 0.0;
+              final concepto = conceptoCtrl.text.trim();
+              
+              provider.aplicarCargoExtraACarrito(identificador, valor, concepto);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmarCancelacion(BuildContext context, InventarioProvider provider, String identificador) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -229,7 +353,7 @@ class CarritosActivosScreen extends StatelessWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () {
-              provider.cancelarCarrito(telefono);
+              provider.cancelarCarrito(identificador);
               Navigator.pop(ctx);
             },
             child: const Text('Sí, cancelar'),
@@ -237,5 +361,11 @@ class CarritosActivosScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class WidgetKeyFix {
+  static TextButton textButton({required VoidCallback onPressed, required Widget child}) {
+    return TextButton(onPressed: onPressed, child: child);
   }
 }

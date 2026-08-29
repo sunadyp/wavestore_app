@@ -99,5 +99,9 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/yo.png" # Asegúrate de que tu logo esté en esta ruta
+  image_path: "assets/yo.png"
   min_sdk_android: 21
+
+  adaptive_icon_background: "#FFE4D6"
+  adaptive_icon_foreground: "assets/yo.png"
+  adaptive_icon_foreground_inset: 0

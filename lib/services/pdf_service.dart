@@ -98,7 +98,7 @@ class PdfService {
                     pw.SizedBox(height: 5),
                     pw.Divider(color: rosaPastel, borderStyle: pw.BorderStyle.dashed),
                     
-                    // Totales
+                    // Totales (Subtotal)
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
@@ -106,12 +106,24 @@ class PdfService {
                         pw.Text('\$${carrito.subtotal.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
                       ]
                     ),
+                    
+                    // Descuento (Si aplica)
                     if (carrito.descuentoMonto > 0)
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
                           pw.Text('Descuento:', style: const pw.TextStyle(fontSize: 9)),
                           pw.Text('-\$${carrito.descuentoMonto.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
+                        ]
+                      ),
+                      
+                    // <-- NUEVO: Desglose del Cargo Extra Personalizado
+                    if (carrito.cargoExtra > 0)
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('${carrito.conceptoCargoExtra}:', style: const pw.TextStyle(fontSize: 9)),
+                          pw.Text('+\$${carrito.cargoExtra.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9)),
                         ]
                       ),
 

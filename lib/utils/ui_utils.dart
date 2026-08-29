@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // <-- NUEVO IMPORT
-import '../providers/inventario_provider.dart'; // <-- NUEVO IMPORT
+import 'package:provider/provider.dart';
+import '../providers/inventario_provider.dart';
 import '../models/producto.dart';
 
 class UIUtils {
@@ -56,7 +56,7 @@ class UIUtils {
               mainAxisSize: MainAxisSize.min,
               children: [
                 
-                // NUEVO: Mostrar dropdown solo si hay carritos activos
+                // Mostrar dropdown solo si hay carritos activos
                 if (telefonosActivos.isNotEmpty) ...[
                   DropdownButtonFormField<String>(
                     decoration: const InputDecoration(
@@ -78,18 +78,17 @@ class UIUtils {
                     },
                   ),
                   const SizedBox(height: 10),
-                  const Text('O ingresa un número nuevo:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Text('O ingresa un número/nombre nuevo:', style: TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(height: 5),
                 ],
 
                 TextField(
                   controller: telefonoCtrl,
-                  keyboardType: TextInputType.phone,
-                  autofocus: telefonosActivos.isEmpty, // Autofocus si no hay lista
+                  keyboardType: TextInputType.text, // <-- CAMBIADO A TECLADO NORMAL
+                  autofocus: telefonosActivos.isEmpty, 
                   decoration: const InputDecoration(
-                    labelText: 'Teléfono de la clienta',
-                    hintText: 'Ej. 8331234567',
-                    prefixIcon: Icon(Icons.phone),
+                    labelText: 'Teléfono, Nombre o @usuario', // <-- ACTUALIZADO
+                    prefixIcon: Icon(Icons.person), // <-- ACTUALIZADO EL ICONO
                   ),
                   onChanged: (val) {
                     setStateDialog(() {
@@ -98,7 +97,7 @@ class UIUtils {
                   },
                 ),
                 
-                // NUEVO: Alerta visual si la cuenta ya está activa
+                // Alerta visual si la cuenta ya está activa
                 if (existeCuenta)
                   const Padding(
                     padding: EdgeInsets.only(top: 8.0),
@@ -108,7 +107,7 @@ class UIUtils {
                         SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            'Este número ya tiene una cuenta activa. Se añadirán los productos a esa cuenta.',
+                            'Esta cuenta ya está activa. Se añadirán los productos a esa misma cuenta.',
                             style: TextStyle(color: Colors.red, fontSize: 12),
                           ),
                         ),
@@ -145,7 +144,7 @@ class UIUtils {
                     Navigator.pop(ctx, {'telefono': telefono, 'cantidad': qty});
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Ingresa un teléfono y cantidad válidos')),
+                      const SnackBar(content: Text('Ingresa un identificador y cantidad válidos')),
                     );
                   }
                 },

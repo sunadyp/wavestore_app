@@ -4,6 +4,7 @@ import '../models/producto.dart';
 import '../models/venta.dart';
 import '../models/movimiento.dart'; 
 import '../data/storage_service.dart';
+import 'dart:math';
 
 class InventarioProvider extends ChangeNotifier {
   
@@ -18,7 +19,10 @@ class InventarioProvider extends ChangeNotifier {
   final StorageService _storage = StorageService();
 
   InventarioProvider() {
-    _cargarDesdeDisco();
+    _cargarDesdeDisco().then((_) {
+      // DESCOMENTA LA SIGUIENTE LÍNEA UNA SOLA VEZ:
+       sembrarDatosMaquillaje();
+    });
   }
 
   // --- GETTERS ---
@@ -72,7 +76,7 @@ class InventarioProvider extends ChangeNotifier {
       DateTime inicioSemana = lunes.add(Duration(days: i * 7));
       DateTime finSemana = inicioSemana.add(const Duration(days: 6));
       String id = "${inicioSemana.day}-${inicioSemana.month}-${inicioSemana.year}";
-      String label = "${DateFormat('dd MMM').format(inicioSemana)} - ${DateFormat('dd MMM').format(finSemana)}";
+      String label = "${DateFormat('dd MMM').format(inicioSemana)} -${DateFormat('dd MMM').format(finSemana)}";
       semanas.add({'id': id, 'label': label, 'inicio': inicioSemana, 'fin': finSemana});
     }
     return semanas;
@@ -81,7 +85,6 @@ class InventarioProvider extends ChangeNotifier {
   List<Map<String, dynamic>> obtenerEstadisticasMensuales() {
     Map<String, Map<String, dynamic>> stats = {};
 
-    // Sumar ingresos (Ventas)
     for (var v in _ventas) {
       String mes = "${v.fecha.year}-${v.fecha.month.toString().padLeft(2, '0')}";
       if (!stats.containsKey(mes)) {
@@ -90,7 +93,6 @@ class InventarioProvider extends ChangeNotifier {
       stats[mes]!['ingresos'] += v.totalFinal;
     }
 
-    // Sumar egresos (Gastos)
     for (var m in _movimientos) {
       if (!m.esInversion) {
         String mes = "${m.fecha.year}-${m.fecha.month.toString().padLeft(2, '0')}";
@@ -154,13 +156,9 @@ class InventarioProvider extends ChangeNotifier {
 
   void agregarProducto(Producto nuevo, {bool afectaCaja = true}) {
     _productos.add(nuevo);
-    
     if (afectaCaja) {
-      // Calcular el gasto total de este nuevo inventario
       double gastoPorInventario = nuevo.costo * nuevo.cantidad;
       _dineroEnCaja -= gastoPorInventario;
-
-      // Registrar formalmente el movimiento en el historial
       _movimientos.add(Movimiento(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         descripcion: 'Compra inicial inventario: ${nuevo.nombre}',
@@ -169,7 +167,6 @@ class InventarioProvider extends ChangeNotifier {
         esInversion: false, 
       ));
     }
-
     _notificarYGuardar();
   }
 
@@ -201,11 +198,8 @@ class InventarioProvider extends ChangeNotifier {
       );
       
       if (afectaCaja) {
-        // Calcular el gasto del reabastecimiento
         double gastoPorReabastecer = costoUnitarioEntrante * cantidadEntrante;
         _dineroEnCaja -= gastoPorReabastecer;
-
-        // Registrar formalmente el movimiento en el historial
         _movimientos.add(Movimiento(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           descripcion: 'Reabastecimiento: ${prod.nombre} ($cantidadEntrante uds)',
@@ -214,7 +208,6 @@ class InventarioProvider extends ChangeNotifier {
           esInversion: false, 
         ));
       }
-
       _notificarYGuardar();
     }
   }
@@ -278,40 +271,53 @@ class InventarioProvider extends ChangeNotifier {
     _notificarYGuardar(); 
   }
 
-  void aplicarDescuentoACarrito(String telefono, double valor, bool esPorcentaje) {
-    if (_carritosActivos.containsKey(telefono)) {
-      _carritosActivos[telefono]!.descuentoValor = valor;
-      _carritosActivos[telefono]!.descuentoEsPorcentaje = esPorcentaje;
+  void aplicarDescuentoACarrito(String identificador, double valor, bool esPorcentaje) {
+    if (_carritosActivos.containsKey(identificador)) {
+      _carritosActivos[identificador]!.descuentoValor = valor;
+      _carritosActivos[identificador]!.descuentoEsPorcentaje = esPorcentaje;
       
       _guardarCarritos();
       notifyListeners();
     }
   }
 
-  void cobrarCarrito(String telefono) {
-    if (!_carritosActivos.containsKey(telefono)) return;
+  // <-- ACTUALIZADO: Ahora recibe el string con el concepto
+  void aplicarCargoExtraACarrito(String identificador, double cargo, String concepto) {
+    if (_carritosActivos.containsKey(identificador)) {
+      _carritosActivos[identificador]!.cargoExtra = cargo;
+      _carritosActivos[identificador]!.conceptoCargoExtra = concepto.isEmpty ? 'Cargo Extra' : concepto; // Por si lo dejan vacío
+      
+      _guardarCarritos();
+      notifyListeners();
+    }
+  }
 
-    final carrito = _carritosActivos[telefono]!;
+  void cobrarCarrito(String identificador) {
+    if (!_carritosActivos.containsKey(identificador)) return;
+
+    final carrito = _carritosActivos[identificador]!;
     final nuevaVenta = Venta(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       telefonoCliente: carrito.telefonoCliente,
       articulos: List.from(carrito.articulos),
       descuentoAplicado: carrito.descuentoMonto,
+      cargoExtra: carrito.cargoExtra, 
+      conceptoCargoExtra: carrito.conceptoCargoExtra, // <-- SE GUARDA EL NOMBRE
       totalFinal: carrito.total,
       fecha: DateTime.now(),
     );
 
     _ventas.add(nuevaVenta);
     _dineroEnCaja += nuevaVenta.totalFinal;
-    _carritosActivos.remove(telefono);
+    _carritosActivos.remove(identificador);
     
     _guardarCarritos();
     _notificarYGuardar();
   }
 
-  void cancelarCarrito(String telefono) {
-    if (!_carritosActivos.containsKey(telefono)) return;
-    final carrito = _carritosActivos[telefono]!;
+  void cancelarCarrito(String identificador) {
+    if (!_carritosActivos.containsKey(identificador)) return;
+    final carrito = _carritosActivos[identificador]!;
     
     for (var articulo in carrito.articulos) {
       final index = _productos.indexWhere((p) => p.id == articulo.productoId);
@@ -321,7 +327,7 @@ class InventarioProvider extends ChangeNotifier {
         );
       }
     }
-    _carritosActivos.remove(telefono);
+    _carritosActivos.remove(identificador);
     
     _guardarCarritos();
     _notificarYGuardar();
@@ -343,6 +349,129 @@ class InventarioProvider extends ChangeNotifier {
 
     _dineroEnCaja -= ventaARevertir.totalFinal;
     _ventas.removeAt(indexVenta);
+    _notificarYGuardar();
+  }
+
+  // =========================================================================
+  // --- MÉTODOS DE PRUEBA Y SIMULACIÓN (SEMBRAR DATOS MASIVOS) ---
+  // =========================================================================
+  void sembrarDatosMaquillaje() {
+    final random = Random();
+    
+    final fechaInicio = DateTime(2026, 1, 1);
+    final fechaFin = DateTime(2026, 8, 7, 23, 59, 59);
+    final diasTotales = fechaFin.difference(fechaInicio).inDays;
+
+    _categorias = ['Rostro', 'Ojos', 'Labios', 'Skincare', 'Herramientas'];
+
+    _productos = [
+      Producto(id: 'p1', nombre: 'Sheglam Color Bloom Liquid Blush', categoria: 'Rostro', costo: 85.0, precioVenta: 180.0, cantidad: 25),
+      Producto(id: 'p2', nombre: 'Elf Power Grip Primer', categoria: 'Rostro', costo: 160.0, precioVenta: 290.0, cantidad: 12),
+      Producto(id: 'p3', nombre: 'Beauty Creations Flora Palette', categoria: 'Ojos', costo: 190.0, precioVenta: 350.0, cantidad: 8),
+      Producto(id: 'p4', nombre: 'Sheglam Insta-Ready Face Powder', categoria: 'Rostro', costo: 110.0, precioVenta: 220.0, cantidad: 15),
+      Producto(id: 'p5', nombre: 'Bissu Tintaline Negro', categoria: 'Ojos', costo: 45.0, precioVenta: 90.0, cantidad: 30),
+      Producto(id: 'p6', nombre: 'Elf Halo Glow Liquid Filter', categoria: 'Rostro', costo: 280.0, precioVenta: 450.0, cantidad: 10),
+      Producto(id: 'p7', nombre: 'Beauty Creations Plump & Pout Gloss', categoria: 'Labios', costo: 75.0, precioVenta: 150.0, cantidad: 20),
+      Producto(id: 'p8', nombre: 'Set Brochas Neon Beauty Creations', categoria: 'Herramientas', costo: 250.0, precioVenta: 480.0, cantidad: 5),
+      Producto(id: 'p9', nombre: 'Esponja Blender Sheglam', categoria: 'Herramientas', costo: 35.0, precioVenta: 80.0, cantidad: 40),
+      Producto(id: 'p10', nombre: 'Good Molecules Niacinamide Toner', categoria: 'Skincare', costo: 180.0, precioVenta: 360.0, cantidad: 18),
+    ];
+
+    _ventas = [];
+    double ingresosTotalesVentas = 0;
+    List<String> telefonosClientes = ['@paola_makeup', '8331112233', 'Maria Gonzalez', '8334445566', '@beauty_fan']; 
+
+    for (int i = 0; i < 220; i++) {
+      final diasRandom = random.nextInt(diasTotales > 0 ? diasTotales : 1);
+      final horaRandom = random.nextInt(10) + 9; 
+      final minRandom = random.nextInt(60);
+      
+      DateTime fechaVenta = fechaInicio.add(Duration(days: diasRandom));
+      fechaVenta = DateTime(fechaVenta.year, fechaVenta.month, fechaVenta.day, horaRandom, minRandom);
+      
+      if (fechaVenta.isAfter(fechaFin)) fechaVenta = fechaFin;
+
+      int numArticulos = random.nextInt(3) + 1;
+      List<ArticuloVenta> articulosVenta = [];
+      double subtotalVenta = 0;
+      
+      List<Producto> poolProductos = List.from(_productos)..shuffle(random);
+      
+      for (int j = 0; j < numArticulos; j++) {
+        Producto p = poolProductos[j];
+        int cantComprada = random.nextInt(2) + 1;
+        
+        articulosVenta.add(ArticuloVenta(
+          productoId: p.id,
+          productoNombre: p.nombre,
+          cantidad: cantComprada,
+          precioUnitario: p.precioVenta,
+        ));
+        subtotalVenta += (cantComprada * p.precioVenta);
+      }
+
+      double descuento = random.nextDouble() > 0.90 ? (random.nextBool() ? 20.0 : 50.0) : 0.0;
+      double cargoExtra = random.nextDouble() > 0.80 ? 60.0 : 0.0; 
+      
+      // <-- NUEVO: Generando nombres aleatorios para el cargo extra en la siembra
+      String conceptoCargoExtra = cargoExtra > 0 ? (random.nextBool() ? 'Costo de envío' : 'Envoltura de regalo') : 'Cargo Extra';
+
+      double totalFinal = (subtotalVenta - descuento) + cargoExtra;
+      if (totalFinal < 0) totalFinal = 0;
+      
+      ingresosTotalesVentas += totalFinal;
+
+      _ventas.add(Venta(
+        id: 'v_prod_$i',
+        telefonoCliente: telefonosClientes[random.nextInt(telefonosClientes.length)],
+        articulos: articulosVenta,
+        descuentoAplicado: descuento,
+        cargoExtra: cargoExtra, 
+        conceptoCargoExtra: conceptoCargoExtra, // <-- SE REGISTRA
+        totalFinal: totalFinal,
+        fecha: fechaVenta,
+      ));
+    }
+
+    _ventas.sort((a, b) => a.fecha.compareTo(b.fecha));
+
+    _movimientos = [];
+    double egresosTotalesGastos = 0;
+
+    _movimientos.add(Movimiento(
+      id: 'm_inicial',
+      descripcion: 'Capital Inicial de Caja (Enero)',
+      monto: 15000.0,
+      fecha: DateTime(2026, 1, 1, 10, 0),
+      esInversion: true,
+    ));
+
+    List<String> tiposDeGastos = [
+      'Restock mayorista Beauty Creations',
+      'Insumos de empaque, bolsas y stickers',
+      'Importación de cosméticos Elf y Sheglam',
+      'Publicidad en Meta Ads (Instagram/FB)',
+      'Cosméticos Bissú al mayoreo'
+    ];
+
+    for (int mes = 1; mes <= 8; mes++) {
+      int gastosPorMes = (mes == 8) ? 1 : 2; 
+      
+      for (int g = 0; g < gastosPorMes; g++) {
+        double montoGasto = 500.0 + random.nextInt(2500);
+        egresosTotalesGastos += montoGasto;
+        
+        _movimientos.add(Movimiento(
+          id: 'm_gasto_${mes}_$g',
+          descripcion: tiposDeGastos[random.nextInt(tiposDeGastos.length)],
+          monto: montoGasto,
+          fecha: DateTime(2026, mes, random.nextInt(6) + 1, 12, 0),
+          esInversion: false,
+        ));
+      }
+    }
+
+    _dineroEnCaja = 15000.0 + ingresosTotalesVentas - egresosTotalesGastos;
     _notificarYGuardar();
   }
 

@@ -31,38 +31,44 @@ class ArticuloVenta {
   }
 }
 
-// Representa una venta en proceso (El Carrito)
+// Representa una venta en proceso (El Carrito o Apartado Activo)
 class Carrito {
-  final String telefonoCliente;
+  final String telefonoCliente; 
   List<ArticuloVenta> articulos;
   double descuentoValor;
   bool descuentoEsPorcentaje;
+  double cargoExtra; 
+  String conceptoCargoExtra; // <-- NUEVO: Guarda el nombre del cargo extra
 
   Carrito({
     required this.telefonoCliente,
     List<ArticuloVenta>? articulos,
     this.descuentoValor = 0.0,
     this.descuentoEsPorcentaje = false,
+    this.cargoExtra = 0.0, 
+    this.conceptoCargoExtra = 'Cargo Extra', // <-- Nombre por default
   }) : articulos = articulos ?? [];
 
   double get subtotal => articulos.fold(0.0, (sum, item) => sum + item.subtotal);
   
-  // Calcula el monto dinámicamente
   double get descuentoMonto => descuentoEsPorcentaje 
       ? (subtotal * (descuentoValor / 100)) 
       : descuentoValor;
 
-  double get total => subtotal - descuentoMonto > 0 ? subtotal - descuentoMonto : 0.0;
+  double get total {
+    double resultado = subtotal - descuentoMonto + cargoExtra;
+    return resultado > 0 ? resultado : 0.0;
+  }
 
-  // NUEVO: Serialización a Map
   Map<String, dynamic> toMap() => {
     'telefonoCliente': telefonoCliente,
     'articulos': articulos.map((a) => a.toMap()).toList(),
     'descuentoValor': descuentoValor,
     'descuentoEsPorcentaje': descuentoEsPorcentaje,
+    'cargoExtra': cargoExtra, 
+    'conceptoCargoExtra': conceptoCargoExtra, // <-- NUEVO
   };
 
-  // NUEVO: Deserialización desde Map
   factory Carrito.fromMap(Map<String, dynamic> map) {
     var listaArticulos = map['articulos'] as List<dynamic>? ?? [];
     return Carrito(
@@ -70,6 +76,8 @@ class Carrito {
       articulos: listaArticulos.map((e) => ArticuloVenta.fromMap(e as Map<String, dynamic>)).toList(),
       descuentoValor: (map['descuentoValor'] ?? 0.0).toDouble(),
       descuentoEsPorcentaje: map['descuentoEsPorcentaje'] ?? false,
+      cargoExtra: (map['cargoExtra'] ?? 0.0).toDouble(), 
+      conceptoCargoExtra: map['conceptoCargoExtra'] ?? 'Cargo Extra', // <-- NUEVO
     );
   }
 }
@@ -79,7 +87,9 @@ class Venta {
   final String id;
   final String telefonoCliente;
   final List<ArticuloVenta> articulos;
-  final double descuentoAplicado;
+  final double descuentoAplicado; 
+  final double cargoExtra; 
+  final String conceptoCargoExtra; // <-- NUEVO: Para que salga en el historial y ticket
   final double totalFinal;
   final DateTime fecha;
 
@@ -87,7 +97,9 @@ class Venta {
     required this.id,
     required this.telefonoCliente,
     required this.articulos,
-    required this.descuentoAplicado,
+    required this.descuentoAplicado, 
+    this.cargoExtra = 0.0, 
+    this.conceptoCargoExtra = 'Cargo Extra', // <-- NUEVO
     required this.totalFinal,
     required this.fecha,
   });
@@ -96,7 +108,9 @@ class Venta {
     'id': id,
     'telefonoCliente': telefonoCliente,
     'articulos': articulos.map((a) => a.toMap()).toList(),
-    'descuentoAplicado': descuentoAplicado,
+    'descuentoAplicado': descuentoAplicado, 
+    'cargoExtra': cargoExtra, 
+    'conceptoCargoExtra': conceptoCargoExtra, // <-- NUEVO
     'totalFinal': totalFinal,
     'fecha': fecha.toIso8601String(),
   };
@@ -105,9 +119,11 @@ class Venta {
     var listaArticulos = map['articulos'] as List<dynamic>? ?? [];
     return Venta(
       id: map['id'] ?? '',
-      telefonoCliente: map['telefonoCliente'] ?? 'Sin teléfono',
+      telefonoCliente: map['telefonoCliente'] ?? 'Sin cliente',
       articulos: listaArticulos.map((e) => ArticuloVenta.fromMap(e as Map<String, dynamic>)).toList(),
-      descuentoAplicado: (map['descuentoAplicado'] ?? 0.0).toDouble(),
+      descuentoAplicado: (map['descuentoAplicado'] ?? 0.0).toDouble(), 
+      cargoExtra: (map['cargoExtra'] ?? 0.0).toDouble(), 
+      conceptoCargoExtra: map['conceptoCargoExtra'] ?? 'Cargo Extra', // <-- NUEVO
       totalFinal: (map['totalFinal'] ?? 0.0).toDouble(),
       fecha: map['fecha'] != null ? DateTime.parse(map['fecha']) : DateTime.now(),
     );

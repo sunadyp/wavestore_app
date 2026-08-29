@@ -9,15 +9,32 @@ class ListaHistorialMovimientos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Manejo eficiente del estado vacío
+    if (movimientos.isEmpty) {
+      return const Center(
+        child: Text(
+          'No hay movimientos registrados.',
+          style: TextStyle(color: Colors.grey, fontSize: 14),
+        ),
+      );
+    }
+
+    // 2. OPTIMIZACIÓN: Crear el formateador de fecha una sola vez fuera del builder
+    // Esto ahorra memoria y evita tirones al hacer scroll rápido en listas muy largas.
+    final dateFormatter = DateFormat('dd/MM/yyyy • hh:mm a');
+
     return ListView.builder(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       itemCount: movimientos.length,
       itemBuilder: (context, index) {
+        // En caso de querer ver los más recientes arriba, 
+        // podrías usar: final mov = movimientos[movimientos.length - 1 - index];
+        // Por ahora lo mantenemos en tu orden original:
         final mov = movimientos[index];
         final bool esGasto = !mov.esInversion;
 
         return Card(
-          elevation: 2,
+          elevation: 1.5, // Sombra ligera para mejor renderizado
           margin: const EdgeInsets.only(bottom: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           child: ListTile(
@@ -31,17 +48,17 @@ class ListaHistorialMovimientos extends StatelessWidget {
             ),
             title: Text(
               mov.descripcion,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
             subtitle: Text(
-              DateFormat('dd/MM/yyyy • hh:mm a').format(mov.fecha),
-              style: const TextStyle(fontSize: 12),
+              dateFormatter.format(mov.fecha), // Usamos la instancia única
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
             trailing: Text(
               '${esGasto ? '-' : '+'}\$${mov.monto.toStringAsFixed(2)}',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: 15,
                 color: esGasto ? Colors.red : Colors.green,
               ),
             ),

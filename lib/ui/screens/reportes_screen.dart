@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import '../../providers/inventario_provider.dart';
 import '../widgets/tarjeta_financiera.dart';
+import '../widgets/lista_historial_ventas.dart'; // <-- Importamos la lista optimizada
 
 class ReportesScreen extends StatelessWidget {
   const ReportesScreen({super.key});
@@ -80,59 +81,117 @@ class ReportesScreen extends StatelessWidget {
               elevation: 2,
               margin: const EdgeInsets.only(bottom: 16),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          mesFormateado,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: esGananciaPositiva ? Colors.green.shade50 : Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(20),
+              clipBehavior: Clip.antiAlias, // <-- Necesario para que el efecto visual del toque no se salga de los bordes curvos
+              child: InkWell(
+                // <-- Hacemos que toda la tarjeta sea un botón
+                onTap: () => _mostrarDesgloseVentas(context, provider, fecha, mesFormateado),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            mesFormateado,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
-                          child: Text(
-                            '${esGananciaPositiva ? '+' : ''}\$${ganancia.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              color: esGananciaPositiva ? Colors.green.shade700 : Colors.red.shade700,
-                              fontWeight: FontWeight.bold,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: esGananciaPositiva ? Colors.green.shade50 : Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${esGananciaPositiva ? '+' : ''}\$${ganancia.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                color: esGananciaPositiva ? Colors.green.shade700 : Colors.red.shade700,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8.0),
-                      child: Divider(),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _DetalleMonto(
-                          titulo: 'Ventas',
-                          monto: ingresos,
-                          color: Colors.blue.shade700,
-                        ),
-                        _DetalleMonto(
-                          titulo: 'Gastos',
-                          monto: gastos,
-                          color: Colors.red.shade700,
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8.0),
+                        child: Divider(),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _DetalleMonto(
+                            titulo: 'Ventas (Toque para ver)', // <-- Pista visual para el usuario
+                            monto: ingresos,
+                            color: Colors.blue.shade700,
+                          ),
+                          _DetalleMonto(
+                            titulo: 'Gastos',
+                            monto: gastos,
+                            color: Colors.red.shade700,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
           }),
       ],
+    );
+  }
+
+  // --- NUEVA FUNCIÓN: Abre una ventana deslizante con las ventas del mes seleccionado ---
+  void _mostrarDesgloseVentas(BuildContext context, InventarioProvider provider, DateTime mesSeleccionado, String nombreMes) {
+    // 1. Calculamos el rango exacto de días para ese mes
+    final inicioMes = DateTime(mesSeleccionado.year, mesSeleccionado.month, 1);
+    final finMes = DateTime(mesSeleccionado.year, mesSeleccionado.month + 1, 0); // El día 0 del mes siguiente nos da el último día del mes actual
+
+    // 2. Extraemos y ordenamos las ventas usando tu Provider
+    final ventasDelMes = provider.obtenerVentasPorRango(inicioMes, finMes);
+    ventasDelMes.sort((a, b) => b.fecha.compareTo(a.fecha)); // Las más recientes arriba
+
+    // 3. Mostramos la ventana inferor
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // Permite que la ventana ocupe casi toda la pantalla
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return FractionallySizedBox(
+          heightFactor: 0.85, // Ocupará el 85% de la altura de la pantalla
+          child: Column(
+            children: [
+              // Encabezado del BottomSheet
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Ventas de $nombreMes',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    )
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              
+              // Cuerpo con la lista optimizada
+              Expanded(
+                child: ListaHistorialVentas(ventas: ventasDelMes),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

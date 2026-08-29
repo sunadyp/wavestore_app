@@ -32,11 +32,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
     final provider = context.watch<InventarioProvider>();
     final inventarioBuscador = provider.productos;
 
-    // Extraer categorías únicas dinámicamente de lo que hay en inventario
-    final Set<String> categoriasUnicas = {'Todas'};
-    for (var p in inventarioBuscador) {
-      categoriasUnicas.add(p.categoria);
-    }
+    // OPTIMIZACIÓN 1: Extracción de categorías únicas de forma nativa y rápida
+    final Set<String> categoriasUnicas = {
+      'Todas',
+      ...inventarioBuscador.map((p) => p.categoria)
+    };
 
     // Aplicar el filtro de los chips sobre los resultados del buscador
     final inventarioFiltrado = _categoriaSeleccionada == 'Todas'
@@ -93,7 +93,15 @@ class _InventarioScreenState extends State<InventarioScreen> {
               : ListView.builder(
                   padding: const EdgeInsets.all(16.0),
                   itemCount: inventarioFiltrado.length,
-                  itemBuilder: (context, index) => ItemProducto(producto: inventarioFiltrado[index]),
+                  itemBuilder: (context, index) {
+                    final producto = inventarioFiltrado[index];
+                    
+                    // OPTIMIZACIÓN 2: Uso de ValueKey para indexar correctamente los widgets
+                    return ItemProducto(
+                      key: ValueKey(producto.id), // <-- Esto evita redibujados innecesarios al filtrar
+                      producto: producto,
+                    );
+                  },
                 ),
           ),
         ],
