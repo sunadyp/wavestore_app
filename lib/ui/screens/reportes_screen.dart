@@ -163,7 +163,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           _DetalleMonto(
-                            titulo: 'Ventas (Toque para ver)', 
+                            titulo: 'Ventas', 
                             monto: ingresos,
                             color: Colors.blue.shade700,
                           ),
@@ -216,7 +216,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
 
         if (productoMayorIngreso != null)
           _InsightCard(
-            titulo: 'Minita de Oro (Mayor Ingreso)',
+            titulo: 'Venta con Mayor Ingreso',
             subtitulo: productoMayorIngreso['nombre'],
             detalle: 'Generó \$${(productoMayorIngreso['ingreso'] as double).toStringAsFixed(2)}',
             icono: Icons.monetization_on,
@@ -318,7 +318,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
                   indicatorColor: Theme.of(context).colorScheme.primary,
                   tabs: const [
                     Tab(text: 'Ventas'),
-                    Tab(text: 'Gastos'),
+                    Tab(text: 'Gastos/Ingresos'),
                   ],
                 ),
                 const Divider(height: 1),
