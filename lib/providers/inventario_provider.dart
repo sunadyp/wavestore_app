@@ -237,23 +237,32 @@ class InventarioProvider extends ChangeNotifier {
 
   void agregarProducto(Producto nuevo, {bool afectaCaja = true}) {
     _productos.add(nuevo);
+    
+    double gastoPorInventario = nuevo.costo * nuevo.cantidad;
+    
+    // Solo restamos de la caja si así lo pediste
     if (afectaCaja) {
-      double gastoPorInventario = nuevo.costo * nuevo.cantidad;
       _dineroEnCaja -= gastoPorInventario;
-      _movimientos.add(Movimiento(
-        id: _uuid.v4(),
-        descripcion: 'Compra inicial inventario: ${nuevo.nombre}',
-        monto: gastoPorInventario,
-        fecha: DateTime.now(),
-        esInversion: false, 
-      ));
-      
       _storage.guardarCaja(_dineroEnCaja);
-      _storage.guardarMovimientos(_movimientos);
     }
     
-    _registrarActividad('Creó el producto "${nuevo.nombre}" con ${nuevo.cantidad} unidades en stock'); // <-- BITÁCORA
+    // SIEMPRE registramos el movimiento para tener de dónde "Deshacer"
+    _movimientos.add(Movimiento(
+      id: _uuid.v4(),
+      // Le ponemos una etiqueta clara si no afectó caja
+      descripcion: afectaCaja 
+          ? 'Compra inicial: ${nuevo.nombre}' 
+          : 'Ingreso a stock (Sin costo a caja): ${nuevo.nombre}',
+      monto: gastoPorInventario, // Guardamos el valor real para que la matemática inversa funcione
+      fecha: DateTime.now(),
+      esInversion: false, 
+      productoId: nuevo.id, 
+      cantidadArticulos: nuevo.cantidad, 
+      afectoCaja: afectaCaja, // <-- Guardamos la bandera
+    ));
+    _storage.guardarMovimientos(_movimientos);
     
+    _registrarActividad('Creó el producto "${nuevo.nombre}" con ${nuevo.cantidad} unidades en stock');
     _estadisticasDesactualizadas = true;
     notifyListeners();
     _storage.guardarProductos(_productos);
@@ -314,6 +323,7 @@ class InventarioProvider extends ChangeNotifier {
       final prod = _productos[index];
       final int nuevoStockTotal = prod.cantidad + cantidadEntrante;
       
+      // Calculamos el nuevo costo promedio
       final double nuevoCostoPromedio = nuevoStockTotal > 0 
           ? ((prod.cantidad * prod.costo) + (cantidadEntrante * costoUnitarioEntrante)) / nuevoStockTotal 
           : costoUnitarioEntrante;
@@ -323,22 +333,31 @@ class InventarioProvider extends ChangeNotifier {
         costo: nuevoCostoPromedio,
       );
       
+      double gastoPorReabastecer = costoUnitarioEntrante * cantidadEntrante;
+
+      // 1. Solo restamos de la caja si se indicó que afecta caja
       if (afectaCaja) {
-        double gastoPorReabastecer = costoUnitarioEntrante * cantidadEntrante;
         _dineroEnCaja -= gastoPorReabastecer;
-        _movimientos.add(Movimiento(
-          id: _uuid.v4(),
-          descripcion: 'Reabastecimiento: ${prod.nombre} ($cantidadEntrante uds)',
-          monto: gastoPorReabastecer,
-          fecha: DateTime.now(),
-          esInversion: false, 
-        ));
-        
         _storage.guardarCaja(_dineroEnCaja);
-        _storage.guardarMovimientos(_movimientos);
       }
       
-      // Registro ultra detallado
+      // 2. SIEMPRE registramos el movimiento en el historial
+      _movimientos.add(Movimiento(
+        id: _uuid.v4(),
+        descripcion: afectaCaja 
+            ? 'Reabastecimiento: ${prod.nombre} ($cantidadEntrante uds)'
+            : 'Reabastecimiento (Sin costo a caja): ${prod.nombre} ($cantidadEntrante uds)',
+        monto: gastoPorReabastecer, // Guardamos el valor para la matemática inversa
+        fecha: DateTime.now(),
+        esInversion: false, 
+        productoId: prod.id, // Huella del producto
+        cantidadArticulos: cantidadEntrante, // Huella de la cantidad
+        afectoCaja: afectaCaja, // Huella de la caja
+      ));
+      
+      _storage.guardarMovimientos(_movimientos);
+      
+      // 3. Registro detallado en la bitácora
       _registrarActividad(
         'Reabasteció "${prod.nombre}" (+$cantidadEntrante). '
         'Stock: ${prod.cantidad} -> $nuevoStockTotal. '
@@ -349,6 +368,61 @@ class InventarioProvider extends ChangeNotifier {
       notifyListeners();
       _storage.guardarProductos(_productos);
     }
+  }
+
+  void revertirMovimiento(String idMovimiento) {
+    final indexMov = _movimientos.indexWhere((m) => m.id == idMovimiento);
+    if (indexMov == -1) return;
+
+    final mov = _movimientos[indexMov];
+
+    // 1. REVERTIR EL DINERO EN CAJA (Solo si originalmente afectó la caja)
+    if (mov.afectoCaja) {
+      if (mov.esInversion) {
+        _dineroEnCaja -= mov.monto; // Si fue un ingreso, lo quitamos
+      } else {
+        _dineroEnCaja += mov.monto; // Si fue un gasto, devolvemos el dinero a la caja
+      }
+    }
+
+    // 2. REVERTIR EL STOCK Y EL COSTO PROMEDIO (Si fue un movimiento de inventario)
+    if (mov.productoId != null && mov.cantidadArticulos != null) {
+      final indexProd = _productos.indexWhere((p) => p.id == mov.productoId);
+      
+      if (indexProd != -1) {
+        final prod = _productos[indexProd];
+        final stockOriginal = prod.cantidad - mov.cantidadArticulos!;
+        
+        double costoOriginal = 0.0;
+        
+        // Deshacemos la matemática del costo promedio
+        if (stockOriginal > 0) {
+          costoOriginal = ((prod.costo * prod.cantidad) - mov.monto) / stockOriginal;
+          if (costoOriginal < 0) costoOriginal = 0.0; // Protección contra valores negativos
+        }
+
+        _productos[indexProd] = prod.copyWith(
+          cantidad: stockOriginal < 0 ? 0 : stockOriginal,
+          costo: costoOriginal,
+        );
+        _storage.guardarProductos(_productos);
+      }
+    }
+
+    // 3. ELIMINAR EL MOVIMIENTO Y REGISTRAR EN BITÁCORA
+    _movimientos.removeAt(indexMov);
+    
+    final textoCaja = mov.afectoCaja 
+        ? 'y se ajustó la caja por \$${mov.monto.toStringAsFixed(2)}' 
+        : 'sin alterar el saldo de la caja';
+        
+    _registrarActividad('Revirtió el movimiento: "${mov.descripcion}" $textoCaja');
+
+    _estadisticasDesactualizadas = true;
+    notifyListeners();
+    
+    _storage.guardarCaja(_dineroEnCaja);
+    _storage.guardarMovimientos(_movimientos);
   }
 
   void registrarGasto(double monto, String descripcion) {

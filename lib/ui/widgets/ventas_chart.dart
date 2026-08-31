@@ -15,24 +15,30 @@ class VentasChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 🚀 OPTIMIZACIÓN: Realizamos el cálculo de agrupaciones y del maxY 
-    // en un solo bloque para evitar iterar las listas múltiples veces.
-    List<double> ventasPorDia = List.filled(7, 0.0);
+    // Cambiamos el nombre a ingresosPorDia para que abarque Ventas e Inversiones
+    List<double> ingresosPorDia = List.filled(7, 0.0);
     List<double> gastosPorDia = List.filled(7, 0.0);
     double maxMonto = 0.0;
 
+    // 1. Sumamos las Ventas a la barra verde (Ingresos)
     for (var venta in ventasSemana) {
       int index = venta.fecha.weekday - 1;
       if (index >= 0 && index < 7) {
-        ventasPorDia[index] += venta.totalFinal;
-        if (ventasPorDia[index] > maxMonto) maxMonto = ventasPorDia[index];
+        ingresosPorDia[index] += venta.totalFinal;
+        if (ingresosPorDia[index] > maxMonto) maxMonto = ingresosPorDia[index];
       }
     }
 
+    // 2. Sumamos los Movimientos (Inversiones a la verde, Gastos a la roja)
     for (var mov in movimientosSemana) {
-      if (!mov.esInversion) {
-        int index = mov.fecha.weekday - 1;
-        if (index >= 0 && index < 7) {
+      int index = mov.fecha.weekday - 1;
+      if (index >= 0 && index < 7) {
+        if (mov.esInversion) {
+          // Es un ingreso/inversión manual -> Va a la barra verde
+          ingresosPorDia[index] += mov.monto;
+          if (ingresosPorDia[index] > maxMonto) maxMonto = ingresosPorDia[index];
+        } else {
+          // Es un gasto -> Va a la barra roja
           gastosPorDia[index] += mov.monto;
           if (gastosPorDia[index] > maxMonto) maxMonto = gastosPorDia[index];
         }
@@ -50,7 +56,7 @@ class VentasChart extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _IndicadorLeyenda(color: Colors.green.shade400, texto: 'Ventas'),
+              _IndicadorLeyenda(color: Colors.green.shade400, texto: 'Ventas / Ingresos'),
               const SizedBox(width: 16),
               _IndicadorLeyenda(color: Colors.red.shade400, texto: 'Gastos'),
             ],
@@ -62,7 +68,7 @@ class VentasChart extends StatelessWidget {
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,
-                maxY: maxY, // Usamos el cálculo optimizado
+                maxY: maxY, 
                 barTouchData: BarTouchData(
                   enabled: true,
                   touchTooltipData: BarTouchTooltipData(
@@ -95,13 +101,13 @@ class VentasChart extends StatelessWidget {
                     barsSpace: 4,
                     barRods: [
                       BarChartRodData(
-                        toY: ventasPorDia[i],
+                        toY: ingresosPorDia[i], // <-- Aquí se pintan Ventas + Inversiones
                         color: Colors.green.shade400,
                         width: 10,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                       ),
                       BarChartRodData(
-                        toY: gastosPorDia[i],
+                        toY: gastosPorDia[i], // <-- Aquí se pintan los Gastos
                         color: Colors.red.shade400,
                         width: 10,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),

@@ -7,6 +7,20 @@ class ResumenBalanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Determinar el color dinámico
+    Color colorBalance;
+    if (totalSemana > 0) {
+      colorBalance = Colors.green;
+    } else if (totalSemana < 0) {
+      colorBalance = Colors.red;
+    } else {
+      colorBalance = Colors.grey;
+    }
+
+    // 2. Formatear el texto para que el signo '-' quede antes del '$'
+    final signo = totalSemana < 0 ? '-' : '';
+    final montoFormateado = '$signo\$${totalSemana.abs().toStringAsFixed(2)}';
+
     return Container(
       padding: const EdgeInsets.all(20),
       margin: const EdgeInsets.all(16),
@@ -18,12 +32,16 @@ class ResumenBalanceCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Text(
-            'Ventas de esta semana:', 
+            'Balance de esta semana:', 
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           Text(
-            '\$${totalSemana.toStringAsFixed(2)}', 
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green),
+            montoFormateado, 
+            style: TextStyle(
+              fontSize: 20, 
+              fontWeight: FontWeight.bold, 
+              color: colorBalance, // <-- Aplicamos el color aquí
+            ),
           ),
         ],
       ),

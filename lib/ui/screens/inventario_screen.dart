@@ -27,14 +27,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 🚀 OPTIMIZACIÓN: Se eliminó el context.watch() global. 
-    // Ahora esta pantalla principal es inmune a reconstrucciones innecesarias.
-
     return Scaffold(
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Barra de búsqueda (Completamente estática)
+          // 1. Barra de búsqueda
           Padding(
             padding: const EdgeInsets.only(top: 16.0, left: 16.0, right: 16.0, bottom: 8.0),
             child: TextField(
@@ -45,21 +42,28 @@ class _InventarioScreenState extends State<InventarioScreen> {
                 filled: true,
                 fillColor: Colors.grey[100],
               ),
-              // context.read() no escucha, solo ejecuta. ¡Perfecto para rendimiento!
               onChanged: (value) => context.read<InventarioProvider>().filtrar(value), 
             ),
           ),
           
-          // 2. Filtros por Categoría (Selector inteligente)
+          // 2. Filtros por Categoría ordenados alfabéticamente
           Selector<InventarioProvider, String>(
-            // Retornamos un String con las categorías unidas para que Flutter sepa 
-            // con exactitud milimétrica si realmente hubo un cambio o no.
             selector: (_, provider) {
-              final unicas = {'Todas', ...provider.productos.map((p) => p.categoria)};
-              return unicas.join('|'); 
+              // Extraemos las categorías únicas
+              final unicas = provider.productos.map((p) => p.categoria).toSet().toList();
+              // Ordenamos alfabéticamente
+              unicas.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+              // Anteponemos 'Todas' siempre al principio
+              return ['Todas', ...unicas].join('|'); 
             },
             builder: (context, categoriasString, child) {
               final categoriasUnicas = categoriasString.split('|');
+              
+              // Verificamos por seguridad que la categoría seleccionada siga existiendo
+              if (!categoriasUnicas.contains(_categoriaSeleccionada)) {
+                _categoriaSeleccionada = 'Todas';
+              }
+
               return SizedBox(
                 height: 50,
                 child: ListView(
@@ -85,7 +89,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
             },
           ),
           
-          // 3. Lista de productos filtrada (Consumer localizado)
+          // 3. Lista de productos filtrada
           Expanded(
             child: Consumer<InventarioProvider>(
               builder: (context, provider, child) {
@@ -104,8 +108,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
                   itemBuilder: (context, index) {
                     final producto = inventarioFiltrado[index];
                     
-                    // Gracias al ValueKey, cuando se actualiza el stock de un producto, 
-                    // Flutter repinta SOLO esa tarjeta y deja las demás intactas.
                     return ItemProducto(
                       key: ValueKey(producto.id), 
                       producto: producto,

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart'; // <-- Importamos para usar IDs seguros
+import 'package:uuid/uuid.dart'; 
 import '../../providers/inventario_provider.dart';
 import '../../models/producto.dart';
 
@@ -13,7 +13,7 @@ class FormularioProducto extends StatefulWidget {
 }
 
 class _FormularioProductoState extends State<FormularioProducto> {
-  final _formKey = GlobalKey<FormState>(); // <-- Llave para validar el formulario
+  final _formKey = GlobalKey<FormState>(); 
   final _nombreCtrl = TextEditingController();
   final _costoCtrl = TextEditingController();
   final _precioCtrl = TextEditingController();
@@ -35,7 +35,6 @@ class _FormularioProductoState extends State<FormularioProducto> {
     }
   }
 
-  // 🚀 OPTIMIZACIÓN CRÍTICA: Liberar memoria para evitar crashes en celulares de gama media/baja
   @override
   void dispose() {
     _nombreCtrl.dispose();
@@ -54,7 +53,7 @@ class _FormularioProductoState extends State<FormularioProducto> {
         content: TextField(
           controller: controller,
           autofocus: true,
-          textCapitalization: TextCapitalization.words, // Capitaliza automáticamente
+          textCapitalization: TextCapitalization.words, 
           decoration: const InputDecoration(hintText: 'Ej. Skincare'),
         ),
         actions: [
@@ -83,23 +82,21 @@ class _FormularioProductoState extends State<FormularioProducto> {
   Widget build(BuildContext context) {
     final esEdicion = widget.productoActual != null;
     
-    // Solo escuchamos cambios en las categorías, no en todo el inventario
     final categoriasDisponibles = context.select<InventarioProvider, List<String>>(
       (provider) => provider.categorias
     );
 
-    // Asignación segura de la categoría inicial
     if (_categoriaSeleccionada == null || !categoriasDisponibles.contains(_categoriaSeleccionada)) {
       _categoriaSeleccionada = categoriasDisponibles.isNotEmpty ? categoriasDisponibles.first : 'General';
     }
 
     return Padding(
       padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom, // Evita que el teclado tape el formulario
+        bottom: MediaQuery.of(context).viewInsets.bottom, 
         top: 20, left: 20, right: 20,
       ),
       child: SingleChildScrollView(
-        child: Form( // <-- Usamos Form para aplicar validaciones a todos los campos
+        child: Form( 
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -135,7 +132,6 @@ class _FormularioProductoState extends State<FormularioProducto> {
               ),
               const SizedBox(height: 10),
 
-              // Agrupamos Costo y Precio en una misma fila para mejor UX
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -158,16 +154,16 @@ class _FormularioProductoState extends State<FormularioProducto> {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
               
-              TextFormField(
-                controller: _cantidadCtrl, 
-                decoration: const InputDecoration(labelText: 'Stock Inicial', prefixIcon: Icon(Icons.inventory_2_outlined)), 
-                keyboardType: TextInputType.number,
-                validator: (value) => value == null || int.tryParse(value) == null ? 'Requerido' : null,
-              ),
-              
+              // Ocultamos todo lo referente a stock y caja si estamos editando
               if (!esEdicion) ...[
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _cantidadCtrl, 
+                  decoration: const InputDecoration(labelText: 'Stock Inicial', prefixIcon: Icon(Icons.inventory_2_outlined)), 
+                  keyboardType: TextInputType.number,
+                  validator: (value) => value == null || int.tryParse(value) == null ? 'Requerido' : null,
+                ),
                 const SizedBox(height: 15),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -177,9 +173,12 @@ class _FormularioProductoState extends State<FormularioProducto> {
                   activeColor: Theme.of(context).colorScheme.primary,
                   onChanged: (val) => setState(() => _afectaCaja = val),
                 ),
+              ] else ...[
+                // Damos un poco de espacio extra inferior si estamos en modo edición para que no quede pegado al botón
+                const SizedBox(height: 25),
               ],
 
-              const SizedBox(height: 25),
+              const SizedBox(height: 10),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Theme.of(context).colorScheme.primary,
@@ -188,10 +187,9 @@ class _FormularioProductoState extends State<FormularioProducto> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 ),
                 onPressed: () {
-                  // Validación automática antes de procesar
                   if (_formKey.currentState!.validate()) {
                     final prod = Producto(
-                      id: esEdicion ? widget.productoActual!.id : const Uuid().v4(), // Generación segura
+                      id: esEdicion ? widget.productoActual!.id : const Uuid().v4(), 
                       nombre: _nombreCtrl.text.trim(),
                       categoria: _categoriaSeleccionada ?? 'General',
                       costo: double.parse(_costoCtrl.text),

@@ -20,7 +20,6 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
   Widget build(BuildContext context) {
     // 🚀 OPTIMIZACIÓN: context.select escucha EXCLUSIVAMENTE los cambios en 
     // la longitud de las listas de ventas y movimientos.
-    // Ignorará por completo si se edita un producto o se agregan artículos a un carrito.
     context.select<InventarioProvider, (int, int)>(
       (p) => (p.ventas.length, p.movimientos.length)
     );
@@ -65,7 +64,21 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
              m.fecha.isBefore(finDelDia);
     }).toList().reversed.toList();
 
-    final double totalSeleccionado = ventasAMostrar.fold(0, (sum, v) => sum + v.totalFinal);
+    // 🚀 NUEVA LISTA: Filtramos para que la gráfica solo lea lo que sí afectó la caja
+    final movimientosParaGrafica = movimientosAMostrar.where((m) => m.afectoCaja).toList();
+
+    // 🚀 NUEVO CÁLCULO: Balance Neto (Ventas + Ingresos - Gastos)
+    final double totalVentas = ventasAMostrar.fold(0, (sum, v) => sum + v.totalFinal);
+    
+    final double ingresosExtra = movimientosParaGrafica
+        .where((m) => m.esInversion)
+        .fold(0, (sum, m) => sum + m.monto);
+        
+    final double gastosTotales = movimientosParaGrafica
+        .where((m) => !m.esInversion)
+        .fold(0, (sum, m) => sum + m.monto);
+
+    final double balanceTotal = (totalVentas + ingresosExtra) - gastosTotales;
 
     // Envolvemos todo en un DefaultTabController para habilitar las pestañas
     return DefaultTabController(
@@ -74,14 +87,15 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
         backgroundColor: Colors.white,
         body: Column(
           children: [
-            ResumenBalanceCard(totalSemana: totalSeleccionado),
+            ResumenBalanceCard(totalSemana: balanceTotal),
 
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
-              child: (ventasAMostrar.isNotEmpty || movimientosAMostrar.isNotEmpty)
+              // Usamos 'movimientosParaGrafica' en la condición y como parámetro
+              child: (ventasAMostrar.isNotEmpty || movimientosParaGrafica.isNotEmpty)
                   ? VentasChart(
                       ventasSemana: ventasAMostrar, 
-                      movimientosSemana: movimientosAMostrar, 
+                      movimientosSemana: movimientosParaGrafica, 
                     )
                   : Container(
                       height: 180,
