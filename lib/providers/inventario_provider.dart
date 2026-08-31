@@ -429,6 +429,39 @@ class InventarioProvider extends ChangeNotifier {
     _storage.guardarCarritosActivos(mapAGuardar);
   }
 
+  void eliminarArticuloDeCarrito(String identificador, ArticuloVenta articulo) {
+    if (!_carritosActivos.containsKey(identificador)) return;
+
+    final carrito = _carritosActivos[identificador]!;
+
+    // 1. Quitamos el artículo específico del carrito
+    carrito.articulos.removeWhere((a) => a.productoId == articulo.productoId);
+
+    // 2. Regresamos el stock al inventario general
+    final indexProd = _productos.indexWhere((p) => p.id == articulo.productoId);
+    if (indexProd != -1) {
+      _productos[indexProd] = _productos[indexProd].copyWith(
+        cantidad: _productos[indexProd].cantidad + articulo.cantidad
+      );
+    }
+
+    // 3. Registramos la acción
+    if (carrito.articulos.isEmpty) {
+      // Si el carrito se quedó sin productos, lo eliminamos por completo para no dejar basura
+      _carritosActivos.remove(identificador);
+      _registrarActividad('Se eliminó el último artículo del apartado de "$identificador" y el carrito fue cancelado');
+    } else {
+      _registrarActividad('Eliminó ${articulo.cantidad}x "${articulo.productoNombre}" del apartado de "$identificador"');
+    }
+
+    // 4. Notificamos a la UI y guardamos en disco
+    notifyListeners();
+    _storage.guardarProductos(_productos);
+    
+    final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+    _storage.guardarCarritosActivos(mapAGuardar);
+  }
+
   void aplicarDescuentoACarrito(String identificador, double valor, bool esPorcentaje) {
     if (_carritosActivos.containsKey(identificador)) {
       final carrito = _carritosActivos[identificador]!;

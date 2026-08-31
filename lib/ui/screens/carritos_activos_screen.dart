@@ -129,11 +129,56 @@ class _CarritosActivosScreenState extends State<CarritosActivosScreen> {
                           const Divider(),
 
                           ...carrito.articulos.map(
-                            (articulo) => ListTile(
-                              dense: true,
-                              title: Text(articulo.productoNombre),
-                              trailing: Text(
-                                '${articulo.cantidad} x \$${articulo.precioUnitario}',
+                            (articulo) => Dismissible(
+                              // La llave debe ser única para que Flutter sepa exactamente qué fila animar
+                              key: ValueKey('${identificadorCliente}_${articulo.productoId}'),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                color: Colors.red.shade400,
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20.0),
+                                child: const Icon(Icons.delete, color: Colors.white),
+                              ),
+                              // Opcional: Un pequeño diálogo para evitar que eliminen por accidente
+                              confirmDismiss: (direction) async {
+                                return await showDialog(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('¿Quitar producto?'),
+                                    content: Text('Se devolverán ${articulo.cantidad} unidades de "${articulo.productoNombre}" al inventario.'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, false),
+                                        child: const Text('No'),
+                                      ),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        onPressed: () => Navigator.pop(ctx, true),
+                                        child: const Text('Sí, quitar'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              onDismissed: (direction) {
+                                provider.eliminarArticuloDeCarrito(identificadorCliente, articulo);
+                                
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('${articulo.productoNombre} devuelto al inventario'),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              child: ListTile(
+                                dense: true,
+                                title: Text(articulo.productoNombre),
+                                trailing: Text(
+                                  '${articulo.cantidad} x \$${articulo.precioUnitario.toStringAsFixed(2)}',
+                                ),
                               ),
                             ),
                           ),
