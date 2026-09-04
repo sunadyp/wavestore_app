@@ -26,7 +26,34 @@ class TarjetaVentaHistorial extends StatelessWidget {
           backgroundColor: Theme.of(context).colorScheme.secondary.withOpacity(0.2),
           child: Icon(Icons.receipt, color: Theme.of(context).colorScheme.primary),
         ),
-        title: Text('Venta a: ${venta.telefonoCliente}', style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Venta a: ${venta.telefonoCliente}', 
+                style: const TextStyle(fontWeight: FontWeight.bold)
+              ),
+            ),
+            // 🚀 ETIQUETA VISUAL DE TARJETA
+            if (venta.pagoConTarjeta)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.credit_card, size: 12, color: Colors.blue),
+                    SizedBox(width: 4),
+                    Text('Tarjeta', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+          ],
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -38,7 +65,8 @@ class TarjetaVentaHistorial extends StatelessWidget {
           ],
         ),
         trailing: Text(
-          '+\$${venta.totalFinal.toStringAsFixed(2)}', 
+          // 🚀 AHORA MUESTRA EL INGRESO NETO
+          '+\$${venta.ingresoNeto.toStringAsFixed(2)}', 
           style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16),
         ),
         children: [
@@ -86,12 +114,36 @@ class TarjetaVentaHistorial extends StatelessWidget {
               ),
             ),
           
+          // 🚀 DESGLOSE DE COMISIÓN DE TARJETA
+          if (venta.pagoConTarjeta)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Comisión bancaria descontada:', style: TextStyle(fontSize: 13, color: Colors.orange)),
+                      Text('-\$${venta.comisionTarjeta.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, color: Colors.orange)),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Ingreso neto real a caja:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green)),
+                      Text('\$${venta.ingresoNeto.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: TextButton.icon(
               icon: const Icon(Icons.settings_backup_restore, color: Colors.redAccent),
               label: const Text('Revertir Venta', style: TextStyle(color: Colors.redAccent)),
-              // Capturamos el provider aquí de forma segura antes de abrir diálogos
               onPressed: () {
                 final provider = context.read<InventarioProvider>();
                 _confirmarReversion(context, venta, provider);

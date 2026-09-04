@@ -68,8 +68,8 @@ class _FinanzasScreenState extends State<FinanzasScreen> {
     final movimientosParaGrafica = movimientosAMostrar.where((m) => m.afectoCaja).toList();
 
     // 🚀 NUEVO CÁLCULO: Balance Neto (Ventas + Ingresos - Gastos)
-    final double totalVentas = ventasAMostrar.fold(0, (sum, v) => sum + v.totalFinal);
-    
+    final double totalVentas = ventasAMostrar.fold(0, (sum, v) => sum + v.ingresoNeto);
+
     final double ingresosExtra = movimientosParaGrafica
         .where((m) => m.esInversion)
         .fold(0, (sum, m) => sum + m.monto);

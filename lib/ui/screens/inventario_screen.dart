@@ -27,102 +27,122 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 1. Barra de búsqueda
-          Padding(
-            padding: const EdgeInsets.only(top: 16.0, left: 16.0, right: 16.0, bottom: 8.0),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Buscar producto...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-                filled: true,
-                fillColor: Colors.grey[100],
-              ),
-              onChanged: (value) => context.read<InventarioProvider>().filtrar(value), 
-            ),
-          ),
-          
-          // 2. Filtros por Categoría ordenados alfabéticamente
-          Selector<InventarioProvider, String>(
-            selector: (_, provider) {
-              // Extraemos las categorías únicas
-              final unicas = provider.productos.map((p) => p.categoria).toSet().toList();
-              // Ordenamos alfabéticamente
-              unicas.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-              // Anteponemos 'Todas' siempre al principio
-              return ['Todas', ...unicas].join('|'); 
-            },
-            builder: (context, categoriasString, child) {
-              final categoriasUnicas = categoriasString.split('|');
-              
-              // Verificamos por seguridad que la categoría seleccionada siga existiendo
-              if (!categoriasUnicas.contains(_categoriaSeleccionada)) {
-                _categoriaSeleccionada = 'Todas';
-              }
-
-              return SizedBox(
-                height: 50,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  children: categoriasUnicas.map((categoria) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: ChoiceChip(
-                        label: Text(categoria),
-                        selected: _categoriaSeleccionada == categoria,
-                        selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                        onSelected: (bool selected) {
-                          setState(() {
-                            _categoriaSeleccionada = categoria;
-                          });
-                        },
-                      ),
-                    );
-                  }).toList(),
+    // 🚀 AGREGAMOS EL CONTROLADOR DE PESTAÑAS (TABS)
+    return DefaultTabController(
+      length: 2, // Dos pestañas: Principal y Concept Store
+      child: Scaffold(
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Barra de búsqueda (Mantiene estado global)
+            Padding(
+              padding: const EdgeInsets.only(top: 16.0, left: 16.0, right: 16.0, bottom: 8.0),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Buscar producto...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                  filled: true,
+                  fillColor: Colors.grey[100],
                 ),
-              );
-            },
-          ),
-          
-          // 3. Lista de productos filtrada
-          Expanded(
-            child: Consumer<InventarioProvider>(
-              builder: (context, provider, child) {
-                final inventarioBuscador = provider.productos;
-                final inventarioFiltrado = _categoriaSeleccionada == 'Todas'
-                    ? inventarioBuscador
-                    : inventarioBuscador.where((p) => p.categoria == _categoriaSeleccionada).toList();
-
-                if (inventarioFiltrado.isEmpty) {
-                  return const Center(child: Text('No hay productos que coincidan'));
+                onChanged: (value) => context.read<InventarioProvider>().filtrar(value), 
+              ),
+            ),
+            
+            // 2. Filtros por Categoría 
+            Selector<InventarioProvider, String>(
+              selector: (_, provider) {
+                final unicas = provider.productos.map((p) => p.categoria).toSet().toList();
+                unicas.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+                return ['Todas', ...unicas].join('|'); 
+              },
+              builder: (context, categoriasString, child) {
+                final categoriasUnicas = categoriasString.split('|');
+                if (!categoriasUnicas.contains(_categoriaSeleccionada)) {
+                  _categoriaSeleccionada = 'Todas';
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16.0),
-                  itemCount: inventarioFiltrado.length,
-                  itemBuilder: (context, index) {
-                    final producto = inventarioFiltrado[index];
-                    
-                    return ItemProducto(
-                      key: ValueKey(producto.id), 
-                      producto: producto,
-                    );
-                  },
+                return SizedBox(
+                  height: 50,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    children: categoriasUnicas.map((categoria) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: ChoiceChip(
+                          label: Text(categoria),
+                          selected: _categoriaSeleccionada == categoria,
+                          selectedColor: Theme.of(context).colorScheme.primaryContainer,
+                          onSelected: (bool selected) {
+                            setState(() {
+                              _categoriaSeleccionada = categoria;
+                            });
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 );
               },
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _mostrarFormulario(context),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        child: const Icon(Icons.add, color: Colors.white),
+            
+            // 3. BARRA DE PESTAÑAS (TABS)
+            TabBar(
+              labelColor: Theme.of(context).colorScheme.primary,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: Theme.of(context).colorScheme.primary,
+              tabs: const [
+                Tab(icon: Icon(Icons.home_filled), text: 'Principal'),
+                Tab(icon: Icon(Icons.storefront), text: 'Concept'),
+              ],
+            ),
+
+            // 4. VISTAS DE LAS PESTAÑAS (TAB VIEWS)
+            Expanded(
+              child: Consumer<InventarioProvider>(
+                builder: (context, provider, child) {
+                  final inventarioBuscador = provider.productos;
+                  final inventarioFiltrado = _categoriaSeleccionada == 'Todas'
+                      ? inventarioBuscador
+                      : inventarioBuscador.where((p) => p.categoria == _categoriaSeleccionada).toList();
+
+                  if (inventarioFiltrado.isEmpty) {
+                    return const Center(child: Text('No hay productos que coincidan'));
+                  }
+
+                  // 🚀 AHORA RECIBE EL PARÁMETRO
+                  Widget construirLista(bool esConceptStore) {
+                    return ListView.builder(
+                      padding: const EdgeInsets.all(16.0),
+                      itemCount: inventarioFiltrado.length,
+                      itemBuilder: (context, index) {
+                        return ItemProducto(
+                          // Le agregamos el bool al key para que Flutter sepa que son tarjetas distintas
+                          key: ValueKey('${inventarioFiltrado[index].id}_$esConceptStore'), 
+                          producto: inventarioFiltrado[index],
+                          esConceptStore: esConceptStore, // <-- SE LO PASAMOS AQUÍ
+                        );
+                      },
+                    );
+                  }
+
+                  return TabBarView(
+                    children: [
+                      construirLista(false), // Vista Principal
+                      construirLista(true),  // Vista Concept Store
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _mostrarFormulario(context),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
       ),
     );
   }

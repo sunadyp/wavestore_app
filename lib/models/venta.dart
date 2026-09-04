@@ -4,12 +4,14 @@ class ArticuloVenta {
   final String productoNombre;
   final int cantidad;
   final double precioUnitario;
+  final bool origenConcept; // <-- NUEVO: ¿Viene de la Concept Store?
 
   ArticuloVenta({
     required this.productoId,
     required this.productoNombre,
     required this.cantidad,
     required this.precioUnitario,
+    this.origenConcept = false, // <-- Retrocompatibilidad segura
   });
 
   double get subtotal => cantidad * precioUnitario;
@@ -19,6 +21,7 @@ class ArticuloVenta {
     'productoNombre': productoNombre,
     'cantidad': cantidad,
     'precioUnitario': precioUnitario,
+    'origenConcept': origenConcept,
   };
 
   factory ArticuloVenta.fromMap(Map<String, dynamic> map) {
@@ -27,6 +30,7 @@ class ArticuloVenta {
       productoNombre: map['productoNombre'] ?? '',
       cantidad: map['cantidad'] ?? 0,
       precioUnitario: (map['precioUnitario'] ?? 0.0).toDouble(),
+      origenConcept: map['origenConcept'] ?? false,
     );
   }
 }
@@ -38,7 +42,8 @@ class Carrito {
   double descuentoValor;
   bool descuentoEsPorcentaje;
   double cargoExtra; 
-  String conceptoCargoExtra; // <-- NUEVO: Guarda el nombre del cargo extra
+  String conceptoCargoExtra;
+  bool pagoConTarjeta; // <-- NUEVO: Bandera para la comisión
 
   Carrito({
     required this.telefonoCliente,
@@ -46,7 +51,8 @@ class Carrito {
     this.descuentoValor = 0.0,
     this.descuentoEsPorcentaje = false,
     this.cargoExtra = 0.0, 
-    this.conceptoCargoExtra = 'Cargo Extra', // <-- Nombre por default
+    this.conceptoCargoExtra = 'Cargo Extra', 
+    this.pagoConTarjeta = false, // Por defecto en efectivo
   }) : articulos = articulos ?? [];
 
   double get subtotal => articulos.fold(0.0, (sum, item) => sum + item.subtotal);
@@ -55,10 +61,22 @@ class Carrito {
       ? (subtotal * (descuentoValor / 100)) 
       : descuentoValor;
 
+  // Lo que paga el cliente
   double get total {
     double resultado = subtotal - descuentoMonto + cargoExtra;
     return resultado > 0 ? resultado : 0.0;
   }
+
+  // 🚀 NUEVO: Cálculo exacto de tu Excel (3.5% + 16% IVA)
+  double get comisionTarjetaMonto {
+    if (!pagoConTarjeta) return 0.0;
+    final comisionBase = total * 0.035; // 3.5%
+    final ivaComision = comisionBase * 0.16; // 16% sobre la comisión
+    return comisionBase + ivaComision;
+  }
+
+  // Lo que realmente entra a la caja de WaveStore
+  double get ingresoNeto => total - comisionTarjetaMonto;
 
   Map<String, dynamic> toMap() => {
     'telefonoCliente': telefonoCliente,
@@ -66,7 +84,8 @@ class Carrito {
     'descuentoValor': descuentoValor,
     'descuentoEsPorcentaje': descuentoEsPorcentaje,
     'cargoExtra': cargoExtra, 
-    'conceptoCargoExtra': conceptoCargoExtra, // <-- NUEVO
+    'conceptoCargoExtra': conceptoCargoExtra, 
+    'pagoConTarjeta': pagoConTarjeta,
   };
 
   factory Carrito.fromMap(Map<String, dynamic> map) {
@@ -77,7 +96,8 @@ class Carrito {
       descuentoValor: (map['descuentoValor'] ?? 0.0).toDouble(),
       descuentoEsPorcentaje: map['descuentoEsPorcentaje'] ?? false,
       cargoExtra: (map['cargoExtra'] ?? 0.0).toDouble(), 
-      conceptoCargoExtra: map['conceptoCargoExtra'] ?? 'Cargo Extra', // <-- NUEVO
+      conceptoCargoExtra: map['conceptoCargoExtra'] ?? 'Cargo Extra', 
+      pagoConTarjeta: map['pagoConTarjeta'] ?? false,
     );
   }
 }
@@ -89,8 +109,10 @@ class Venta {
   final List<ArticuloVenta> articulos;
   final double descuentoAplicado; 
   final double cargoExtra; 
-  final String conceptoCargoExtra; // <-- NUEVO: Para que salga en el historial y ticket
-  final double totalFinal;
+  final String conceptoCargoExtra; 
+  final double totalFinal; // Lo que pagó el cliente
+  final double comisionTarjeta; // <-- NUEVO: Guardamos cuánto nos quitaron
+  final bool pagoConTarjeta; // <-- NUEVO: Para mostrar el iconito de tarjeta en el historial
   final DateTime fecha;
 
   Venta({
@@ -99,10 +121,15 @@ class Venta {
     required this.articulos,
     required this.descuentoAplicado, 
     this.cargoExtra = 0.0, 
-    this.conceptoCargoExtra = 'Cargo Extra', // <-- NUEVO
+    this.conceptoCargoExtra = 'Cargo Extra', 
     required this.totalFinal,
+    this.comisionTarjeta = 0.0,
+    this.pagoConTarjeta = false,
     required this.fecha,
   });
+
+  // Utilidad real sumada a caja
+  double get ingresoNeto => totalFinal - comisionTarjeta;
 
   Map<String, dynamic> toMap() => {
     'id': id,
@@ -110,8 +137,10 @@ class Venta {
     'articulos': articulos.map((a) => a.toMap()).toList(),
     'descuentoAplicado': descuentoAplicado, 
     'cargoExtra': cargoExtra, 
-    'conceptoCargoExtra': conceptoCargoExtra, // <-- NUEVO
+    'conceptoCargoExtra': conceptoCargoExtra, 
     'totalFinal': totalFinal,
+    'comisionTarjeta': comisionTarjeta,
+    'pagoConTarjeta': pagoConTarjeta,
     'fecha': fecha.toIso8601String(),
   };
 
@@ -123,8 +152,10 @@ class Venta {
       articulos: listaArticulos.map((e) => ArticuloVenta.fromMap(e as Map<String, dynamic>)).toList(),
       descuentoAplicado: (map['descuentoAplicado'] ?? 0.0).toDouble(), 
       cargoExtra: (map['cargoExtra'] ?? 0.0).toDouble(), 
-      conceptoCargoExtra: map['conceptoCargoExtra'] ?? 'Cargo Extra', // <-- NUEVO
+      conceptoCargoExtra: map['conceptoCargoExtra'] ?? 'Cargo Extra', 
       totalFinal: (map['totalFinal'] ?? 0.0).toDouble(),
+      comisionTarjeta: (map['comisionTarjeta'] ?? 0.0).toDouble(),
+      pagoConTarjeta: map['pagoConTarjeta'] ?? false,
       fecha: map['fecha'] != null ? DateTime.parse(map['fecha']) : DateTime.now(),
     );
   }

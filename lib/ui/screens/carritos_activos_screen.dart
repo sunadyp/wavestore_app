@@ -99,6 +99,7 @@ class _CarritosActivosScreenState extends State<CarritosActivosScreen> {
                     final entry = carritosFiltrados[index];
                     final identificadorCliente = entry.key;
                     final carrito = entry.value;
+                    final bool esDeConcept = carrito.articulos.isNotEmpty && carrito.articulos.first.origenConcept;
 
                     return Card(
                       key: ValueKey(identificadorCliente),
@@ -130,8 +131,7 @@ class _CarritosActivosScreenState extends State<CarritosActivosScreen> {
 
                           ...carrito.articulos.map(
                             (articulo) => Dismissible(
-                              // La llave debe ser única para que Flutter sepa exactamente qué fila animar
-                              key: ValueKey('${identificadorCliente}_${articulo.productoId}'),
+                              key: ValueKey('${identificadorCliente}_${articulo.productoId}_${articulo.origenConcept}'), // <-- Ajuste de llave
                               direction: DismissDirection.endToStart,
                               background: Container(
                                 color: Colors.red.shade400,
@@ -139,7 +139,6 @@ class _CarritosActivosScreenState extends State<CarritosActivosScreen> {
                                 padding: const EdgeInsets.only(right: 20.0),
                                 child: const Icon(Icons.delete, color: Colors.white),
                               ),
-                              // Opcional: Un pequeño diálogo para evitar que eliminen por accidente
                               confirmDismiss: (direction) async {
                                 return await showDialog(
                                   context: context,
@@ -176,6 +175,7 @@ class _CarritosActivosScreenState extends State<CarritosActivosScreen> {
                               child: ListTile(
                                 dense: true,
                                 title: Text(articulo.productoNombre),
+                                subtitle: Text(articulo.origenConcept ? 'Concept Store' : 'Inventario Principal', style: const TextStyle(fontSize: 10)),
                                 trailing: Text(
                                   '${articulo.cantidad} x \$${articulo.precioUnitario.toStringAsFixed(2)}',
                                 ),
@@ -315,10 +315,6 @@ class _CarritosActivosScreenState extends State<CarritosActivosScreen> {
                                   ),
                                   onPressed: () async {
                                     try {
-                                      print(
-                                        'Teléfono del carrito: ${carrito.telefonoCliente}',
-                                      );
-
                                       await WhatsappService.abrirChat(
                                         carrito.telefonoCliente,
                                       );
@@ -338,24 +334,18 @@ class _CarritosActivosScreenState extends State<CarritosActivosScreen> {
                                 ),
 
                                 // BOTÓN PDF
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.blue,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
+                                if (!esDeConcept)
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.blue,
+                                      padding: const EdgeInsets.symmetric(horizontal: 8),
                                     ),
+                                    icon: const Icon(Icons.picture_as_pdf),
+                                    label: const Text('PDF'),
+                                    onPressed: () async {
+                                      await PdfService.generarYCompartirTicket(carrito);
+                                    },
                                   ),
-                                  icon: const Icon(
-                                    Icons.picture_as_pdf,
-                                  ),
-                                  label: const Text('PDF'),
-                                  onPressed: () async {
-                                    await PdfService
-                                        .generarYCompartirTicket(
-                                      carrito,
-                                    );
-                                  },
-                                ),
 
                                 // BOTÓN COBRAR
                                 ElevatedButton.icon(
@@ -373,7 +363,8 @@ class _CarritosActivosScreenState extends State<CarritosActivosScreen> {
                                       context,
                                       provider,
                                       identificadorCliente,
-                                      carrito.total,
+                                      carrito, 
+                                      esDeConcept, // 🚀 LE PASAMOS LA REGLA
                                     );
                                   },
                                 ),
@@ -393,56 +384,130 @@ class _CarritosActivosScreenState extends State<CarritosActivosScreen> {
     );
   }
 
+  // 🚀 NUEVO CUADRO DE CONFIRMACIÓN CON SELECTOR DE TARJETA/EFECTIVO
   void _confirmarCobro(
     BuildContext context,
     InventarioProvider provider,
     String identificador,
-    double totalFinal,
+    Carrito carrito,
+    bool esDeConcept, // 🚀 Recibimos si es de la concept
   ) {
+    bool pagoConTarjeta = false;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirmar Cobro'),
-        content: Text(
-          '¿Estás seguro de cobrar este apartado por un total de \$${totalFinal.toStringAsFixed(2)}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Revisar',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              provider.cobrarCarrito(
-                identificador,
-              );
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          final double comisionBase = carrito.total * 0.035;
+          final double ivaComision = comisionBase * 0.16;
+          final double totalComision = comisionBase + ivaComision;
+          final double ingresoNeto = carrito.total - totalComision;
 
-              Navigator.pop(ctx);
-
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Venta de $identificador cobrada con éxito',
+          return AlertDialog(
+            title: const Text('Confirmar Cobro', textAlign: TextAlign.center),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 🚀 SOLO MUESTRA LAS TARJETAS SI ES DE LA CONCEPT STORE
+                if (esDeConcept) ...[
+                  const Text('Selecciona el método de pago:', style: TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 15),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Center(child: Text('Efectivo / Transf.')),
+                          selected: !pagoConTarjeta,
+                          selectedColor: Colors.green.shade100,
+                          onSelected: (val) => setStateDialog(() => pagoConTarjeta = false),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Center(child: Text('Tarjeta')),
+                          selected: pagoConTarjeta,
+                          selectedColor: Colors.blue.shade100,
+                          onSelected: (val) => setStateDialog(() => pagoConTarjeta = true),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                
+                // VISTA PREVIA DEL COBRO
+                if (!pagoConTarjeta)
+                  Column(
+                    children: [
+                      Text(
+                        'Total a cobrar: \$${carrito.total.toStringAsFixed(2)}',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        esDeConcept ? 'Entrará íntegro a caja (Sin comisión).' : 'Venta de Inventario Principal',
+                        style: const TextStyle(fontSize: 12, color: Colors.green),
+                      ),
+                    ],
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.red.shade100),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('El cliente paga: \$${carrito.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text('Comisión (3.5%): -\$${comisionBase.toStringAsFixed(2)}', style: const TextStyle(color: Colors.red, fontSize: 13)),
+                        Text('IVA Com. (16%): -\$${ivaComision.toStringAsFixed(2)}', style: const TextStyle(color: Colors.red, fontSize: 13)),
+                        const Divider(),
+                        Text(
+                          'Ingreso neto a caja: \$${ingresoNeto.toStringAsFixed(2)}', 
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 15)
+                        ),
+                      ],
                     ),
                   ),
-                );
-              }
-            },
-            child: const Text('Sí, cobrar'),
-          ),
-        ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () {
+                  provider.cobrarCarrito(
+                    identificador,
+                    pagoConTarjeta: pagoConTarjeta,
+                  );
+                  Navigator.pop(ctx);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Venta cobrada con éxito. Caja actualizada.')),
+                    );
+                  }
+                },
+                child: const Text('Confirmar Pago'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
+  // (Los métodos _mostrarDialogoDescuento, _mostrarDialogoCargoExtra y _confirmarCancelacion quedan igual que antes)
   void _mostrarDialogoDescuento(
     BuildContext context,
     InventarioProvider provider,
@@ -634,7 +699,7 @@ class _CarritosActivosScreenState extends State<CarritosActivosScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('¿Cancelar apartado?'),
         content: const Text(
-          'Los productos regresarán al inventario disponible.',
+          'Los productos regresarán a su inventario correspondiente.',
         ),
         actions: [
           TextButton(

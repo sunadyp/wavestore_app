@@ -1,63 +1,65 @@
 class Producto {
   final String id;
   final String nombre;
-  final String categoria; // <-- Nuevo campo
+  final String categoria; 
   final double costo;
   final double precioVenta;
-  final int cantidad;
+  final int cantidad; // <-- Stock Principal
+  final int cantidadConcept; // <-- NUEVO: Stock en la Concept Store
 
   Producto({
     required this.id,
     required this.nombre,
-    required this.categoria, // <-- Requerido en el constructor
+    required this.categoria, 
     required this.costo,
     required this.precioVenta,
     required this.cantidad,
+    this.cantidadConcept = 0, // <-- Retrocompatibilidad segura
   });
 
-  // <-- Nuevo: Cálculo automático de la utilidad
   double get utilidad => precioVenta - costo;
 
-  // 1. Método para copiar el objeto (útil para actualizar stock)
   Producto copyWith({
     String? id,
     String? nombre,
-    String? categoria, // <-- Agregado
+    String? categoria, 
     double? costo,
     double? precioVenta,
     int? cantidad,
+    int? cantidadConcept, // <-- Agregado
   }) {
     return Producto(
       id: id ?? this.id,
       nombre: nombre ?? this.nombre,
-      categoria: categoria ?? this.categoria, // <-- Agregado
+      categoria: categoria ?? this.categoria, 
       costo: costo ?? this.costo,
       precioVenta: precioVenta ?? this.precioVenta,
       cantidad: cantidad ?? this.cantidad,
+      cantidadConcept: cantidadConcept ?? this.cantidadConcept, // <-- Agregado
     );
   }
 
-  // Convierte el objeto a un mapa
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'nombre': nombre,
-      'categoria': categoria, // <-- Agregado
+      'categoria': categoria, 
       'costo': costo,
       'precioVenta': precioVenta,
       'cantidad': cantidad,
+      'cantidadConcept': cantidadConcept, // <-- Agregado
     };
   }
 
-  // 2. Crea un objeto con mayor seguridad de tipos
   factory Producto.fromMap(Map<String, dynamic> map) {
     return Producto(
       id: map['id'] ?? '',
       nombre: map['nombre'] ?? '',
-      categoria: map['categoria'] ?? 'General', // <-- Agregado con valor por defecto
+      categoria: map['categoria'] ?? 'General', 
       costo: (map['costo'] ?? 0.0).toDouble(),
       precioVenta: (map['precioVenta'] ?? 0.0).toDouble(),
       cantidad: map['cantidad'] ?? 0,
+      cantidadConcept: map['cantidadConcept'] ?? 0, // <-- Retrocompatibilidad segura
     );
   }
 }

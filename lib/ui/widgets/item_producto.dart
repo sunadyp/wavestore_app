@@ -4,16 +4,22 @@ import '../../providers/inventario_provider.dart';
 import '../../models/producto.dart';
 import '../../utils/ui_utils.dart';
 import 'formulario_producto.dart';
+import 'modal_transferencia.dart'; 
+import 'modal_salida_stock.dart'; // 🚀 NUEVO IMPORT
 
 class ItemProducto extends StatelessWidget {
   final Producto producto;
+  final bool esConceptStore;
 
-  const ItemProducto({super.key, required this.producto});
+  const ItemProducto({
+    super.key, 
+    required this.producto,
+    this.esConceptStore = false, 
+  });
 
   @override
   Widget build(BuildContext context) {
-    // 🚀 OPTIMIZACIÓN: Quitamos la lectura del provider del método build.
-    // Solo lo leeremos en las funciones de los botones cuando se necesite.
+    final int stockDisponible = esConceptStore ? producto.cantidadConcept : producto.cantidad;
 
     return Dismissible(
       key: Key(producto.id),
@@ -27,7 +33,13 @@ class ItemProducto extends StatelessWidget {
       child: Card(
         elevation: 2,
         margin: const EdgeInsets.only(bottom: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+          side: BorderSide(
+            color: esConceptStore ? Colors.purple.withOpacity(0.3) : Colors.transparent, 
+            width: 1
+          ),
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row( 
@@ -43,9 +55,23 @@ class ItemProducto extends StatelessWidget {
                       maxLines: 1, 
                       overflow: TextOverflow.ellipsis, 
                     ),
+                    const SizedBox(height: 4),
+                    
+                    Row(
+                      children: [
+                        Icon(Icons.home_outlined, size: 14, color: esConceptStore ? Colors.grey : Colors.black),
+                        const SizedBox(width: 4),
+                        Text('${producto.cantidad}', style: TextStyle(fontSize: 13, fontWeight: esConceptStore ? FontWeight.normal : FontWeight.bold)),
+                        const SizedBox(width: 12),
+                        Icon(Icons.storefront_outlined, size: 14, color: esConceptStore ? Colors.purple : Colors.grey),
+                        const SizedBox(width: 4),
+                        Text('${producto.cantidadConcept}', style: TextStyle(fontSize: 13, fontWeight: esConceptStore ? FontWeight.bold : FontWeight.normal)),
+                      ],
+                    ),
+                    
                     const SizedBox(height: 2),
                     Text(
-                      'Stock: ${producto.cantidad} | \$${producto.precioVenta}',
+                      'Precio: \$${producto.precioVenta.toStringAsFixed(2)}',
                       style: const TextStyle(fontSize: 13, color: Colors.black87),
                     ),
                     const SizedBox(height: 6),
@@ -86,15 +112,29 @@ class ItemProducto extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.swap_horiz, color: Colors.deepPurple, size: 22),
+                    tooltip: 'Transferir stock',
+                    onPressed: () => _abrirTransferencia(context),
+                  ),
+                  IconButton(
                     visualDensity: VisualDensity.compact, 
                     icon: const Icon(Icons.add_box, color: Colors.blue, size: 22),
                     onPressed: () => _reabastecer(context),
                   ),
-                  if (producto.cantidad > 0)
+                  // 🚀 BOTÓN DE MERMA/REGALO
+                  if (stockDisponible > 0)
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.remove_circle_outline, color: Colors.orange, size: 22),
+                      tooltip: 'Registrar Merma o Regalo',
+                      onPressed: () => _abrirSalidaStock(context),
+                    ),
+                  if (stockDisponible > 0)
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.point_of_sale, color: Colors.green, size: 22),
-                      onPressed: () => _ejecutarVenta(context),
+                      onPressed: () => _ejecutarVenta(context, stockDisponible),
                     ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
@@ -110,18 +150,55 @@ class ItemProducto extends StatelessWidget {
     );
   }
 
-  void _ejecutarVenta(BuildContext context) async {
+  void _abrirTransferencia(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => ModalTransferencia(producto: producto),
+    );
+  }
+
+  // 🚀 MÉTODO PARA ABRIR EL MODAL DE SALIDA DE STOCK
+  void _abrirSalidaStock(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => ModalSalidaStock(
+        producto: producto, 
+        esConceptStore: esConceptStore,
+      ),
+    );
+  }
+
+  void _ejecutarVenta(BuildContext context, int stockDisponible) async {
     final resultado = await UIUtils.mostrarDialogoVenta(context, producto);
     if (resultado != null && context.mounted) {
       final provider = context.read<InventarioProvider>();
       final String telefono = resultado['telefono'];
       final int qty = resultado['cantidad'];
       
-      if (qty > 0 && qty <= producto.cantidad) {
-        provider.agregarAlCarrito(telefono, producto, qty);
-        _notificar(context, '$qty agregados al carrito de $telefono');
+      if (qty > 0 && qty <= stockDisponible) {
+        final error = provider.agregarAlCarrito(telefono, producto, qty, origenConcept: esConceptStore);
+        
+        if (error == null) {
+          _notificar(context, '$qty agregados al carrito de $telefono');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(error, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), 
+              backgroundColor: Colors.red.shade600,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       } else {
-        _notificar(context, 'Stock insuficiente');
+        _notificar(context, 'Stock insuficiente en esta ubicación');
       }
     }
   }
@@ -144,7 +221,7 @@ class ItemProducto extends StatelessWidget {
                   TextField(
                     controller: qtyCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Cantidad a ingresar'),
+                    decoration: const InputDecoration(labelText: 'Cantidad a ingresar al Principal'),
                     autofocus: true,
                   ),
                   TextField(

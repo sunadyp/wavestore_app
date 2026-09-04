@@ -24,7 +24,8 @@ class VentasChart extends StatelessWidget {
     for (var venta in ventasSemana) {
       int index = venta.fecha.weekday - 1;
       if (index >= 0 && index < 7) {
-        ingresosPorDia[index] += venta.totalFinal;
+        // 🚀 CAMBIO: Ahora suma el ingreso neto descontando comisiones
+        ingresosPorDia[index] += venta.ingresoNeto;
         if (ingresosPorDia[index] > maxMonto) maxMonto = ingresosPorDia[index];
       }
     }
