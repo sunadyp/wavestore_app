@@ -6,11 +6,16 @@ import 'ui/screens/inventario_screen.dart';
 import 'ui/screens/finanzas_screen.dart';
 import 'ui/screens/carritos_activos_screen.dart'; 
 import 'ui/screens/reportes_screen.dart';
-import 'ui/screens/bitacora_actividades.dart'; // <-- NUEVA IMPORTACIÓN
+import 'ui/screens/bitacora_actividades.dart'; 
 import 'data/storage_service.dart'; 
+import 'services/notificaciones_service.dart'; // 🚀 NUEVA IMPORTACIÓN
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 🚀 Inicializamos el servicio de notificaciones
+  await NotificacionesService.inicializar();
+
   runApp(
     MultiProvider(
       providers: [
@@ -145,7 +150,6 @@ class _NavegacionPrincipalState extends State<NavegacionPrincipal> {
       appBar: AppBar(
         title: const Text('W A V E  S T O R E', 
           style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2)),
-        // <-- NUEVO: Botón de Bitácora Global
         actions: [
           IconButton(
             icon: const Icon(Icons.history_toggle_off_rounded),

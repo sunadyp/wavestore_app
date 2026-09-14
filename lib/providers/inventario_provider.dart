@@ -6,8 +6,8 @@ import '../models/venta.dart';
 import '../models/movimiento.dart'; 
 import '../models/actividad.dart'; 
 import '../data/storage_service.dart';
+import '../services/notificaciones_service.dart';
 
-// 🚀 MAGIA: Le decimos a Dart que los métodos están en estos otros archivos
 part 'extensions/estadisticas_extension.dart';
 part 'extensions/bitacora_extension.dart';
 part 'extensions/productos_extension.dart';

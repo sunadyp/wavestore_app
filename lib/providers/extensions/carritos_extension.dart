@@ -2,7 +2,6 @@ part of '../inventario_provider.dart';
 
 extension CarritosExtension on InventarioProvider {
 
-  // Función helper para normalizar el identificador (Llave del Map)
   String _normalizarIdentificador(String texto) {
     String t = texto.trim().toLowerCase();
     t = t.replaceAll(RegExp(r'[áäâà]'), 'a');
@@ -11,6 +10,64 @@ extension CarritosExtension on InventarioProvider {
     t = t.replaceAll(RegExp(r'[óöôò]'), 'o');
     t = t.replaceAll(RegExp(r'[úüûù]'), 'u');
     return t;
+  }
+
+  void actualizarLogistica(String identificador, {DateTime? fechaEntrega, String? lugarEntrega}) {
+    final idNormalizado = _normalizarIdentificador(identificador);
+    if (_carritosActivos.containsKey(idNormalizado)) {
+      final carrito = _carritosActivos[idNormalizado]!;
+      
+      if (fechaEntrega != null) {
+        carrito.fechaEntrega = fechaEntrega;
+        
+        // 🚀 1. Como ya se le asignó fecha, cancelamos las alarmas de "apartado sin fecha"
+        NotificacionesService.cancelarRecordatorio("${idNormalizado}_dia2".hashCode);
+        NotificacionesService.cancelarRecordatorio("${idNormalizado}_dia3".hashCode);
+
+        final lugarText = lugarEntrega != null && lugarEntrega.isNotEmpty ? ' en $lugarEntrega' : '';
+        
+        // 🚀 2. ALERTA PREVIA (1 HORA ANTES)
+        NotificacionesService.programarRecordatorio(
+          id: "${idNormalizado}_pre".hashCode, 
+          titulo: '📦 Próxima Entrega',
+          cuerpo: 'En 1 hora tienes una entrega con ${carrito.telefonoCliente}$lugarText.',
+          fechaProgramada: fechaEntrega.subtract(const Duration(hours: 1)),
+        );
+
+        // 🚀 3. ALERTA DE SEGUIMIENTO (20 MINUTOS DESPUÉS)
+        NotificacionesService.programarRecordatorio(
+          id: "${idNormalizado}_post".hashCode, 
+          titulo: '✅ ¿Se concretó la entrega?',
+          cuerpo: 'Tu cita con ${carrito.telefonoCliente} fue hace 20 minutos. No olvides cobrar el ticket o reagendar.',
+          fechaProgramada: fechaEntrega.add(const Duration(minutes: 20)),
+        );
+      }
+      
+      if (lugarEntrega != null) carrito.lugarEntrega = lugarEntrega;
+
+      registrarActividad('Actualizó la entrega de "${carrito.telefonoCliente}" para el ${carrito.fechaEntrega?.day}/${carrito.fechaEntrega?.month} en ${carrito.lugarEntrega ?? "lugar por definir"}');
+
+      notifyListeners();
+      final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+      _storage.guardarCarritosActivos(mapAGuardar);
+    }
+  }
+
+  void registrarAnticipo(String identificador, double monto) {
+    final idNormalizado = _normalizarIdentificador(identificador);
+    if (_carritosActivos.containsKey(idNormalizado) && monto > 0) {
+      final carrito = _carritosActivos[idNormalizado]!;
+      
+      carrito.anticipo += monto;
+      _dineroEnCaja += monto;
+
+      registrarActividad('Recibió un anticipo de \$${monto.toStringAsFixed(2)} del apartado de "${carrito.telefonoCliente}"');
+
+      notifyListeners();
+      _storage.guardarCaja(_dineroEnCaja);
+      final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+      _storage.guardarCarritosActivos(mapAGuardar);
+    }
   }
 
   String? agregarAlCarrito(String telefono, Producto producto, int cantidad, {bool origenConcept = false}) {
@@ -31,8 +88,22 @@ extension CarritosExtension on InventarioProvider {
     }
 
     if (!_carritosActivos.containsKey(idNormalizado)) {
-      // Usamos la llave normalizada, pero guardamos el texto original (solo sin espacios extra)
       _carritosActivos[idNormalizado] = Carrito(telefonoCliente: telefono.trim());
+
+      // 🚀 4. ALERTAS DE "APARTADO AL AIRE" (A los 2 y 3 días)
+      NotificacionesService.programarRecordatorio(
+        id: "${idNormalizado}_dia2".hashCode,
+        titulo: '⚠️ Apartado sin fecha',
+        cuerpo: 'Tienes un apartado de "${telefono.trim()}" sin fecha desde hace 2 días. ¿Sigue en pie?',
+        fechaProgramada: DateTime.now().add(const Duration(days: 2)),
+      );
+
+      NotificacionesService.programarRecordatorio(
+        id: "${idNormalizado}_dia3".hashCode,
+        titulo: '🚨 Apartado olvidado',
+        cuerpo: 'El apartado de "${telefono.trim()}" lleva 3 días sin fecha de entrega asignada.',
+        fechaProgramada: DateTime.now().add(const Duration(days: 3)),
+      );
     }
 
     final carrito = _carritosActivos[idNormalizado]!;
@@ -93,6 +164,17 @@ extension CarritosExtension on InventarioProvider {
     }
 
     if (carrito.articulos.isEmpty) {
+      if (carrito.anticipo > 0) {
+        _dineroEnCaja -= carrito.anticipo;
+        _storage.guardarCaja(_dineroEnCaja);
+      }
+      
+      // 🚀 CANCELAR TODAS LAS NOTIFICACIONES POSIBLES AL VACIAR EL CARRITO
+      NotificacionesService.cancelarRecordatorio("${idNormalizado}_pre".hashCode);
+      NotificacionesService.cancelarRecordatorio("${idNormalizado}_post".hashCode);
+      NotificacionesService.cancelarRecordatorio("${idNormalizado}_dia2".hashCode);
+      NotificacionesService.cancelarRecordatorio("${idNormalizado}_dia3".hashCode);
+
       _carritosActivos.remove(idNormalizado);
       registrarActividad('Se eliminó el último artículo del apartado de "${carrito.telefonoCliente}" y el carrito fue cancelado');
     } else {
@@ -166,11 +248,20 @@ extension CarritosExtension on InventarioProvider {
       comisionTarjeta: carrito.comisionTarjetaMonto, 
       pagoConTarjeta: pagoConTarjeta,
       fecha: DateTime.now(),
+      lugarEntrega: carrito.lugarEntrega,
     );
 
     _ventas.add(nuevaVenta);
     
-    _dineroEnCaja += nuevaVenta.ingresoNeto; 
+    final montoRestanteCaja = nuevaVenta.ingresoNeto - carrito.anticipo;
+    _dineroEnCaja += montoRestanteCaja; 
+    
+    // 🚀 CANCELAR TODAS LAS NOTIFICACIONES (ya se cobró y cerró el proceso)
+    NotificacionesService.cancelarRecordatorio("${idNormalizado}_pre".hashCode);
+    NotificacionesService.cancelarRecordatorio("${idNormalizado}_post".hashCode);
+    NotificacionesService.cancelarRecordatorio("${idNormalizado}_dia2".hashCode);
+    NotificacionesService.cancelarRecordatorio("${idNormalizado}_dia3".hashCode);
+
     _carritosActivos.remove(idNormalizado);
     
     final textoPago = pagoConTarjeta 
@@ -204,6 +295,17 @@ extension CarritosExtension on InventarioProvider {
       }
     }
     
+    if (carrito.anticipo > 0) {
+      _dineroEnCaja -= carrito.anticipo;
+      _storage.guardarCaja(_dineroEnCaja);
+    }
+
+    // 🚀 CANCELAR TODAS LAS NOTIFICACIONES (se canceló la venta)
+    NotificacionesService.cancelarRecordatorio("${idNormalizado}_pre".hashCode);
+    NotificacionesService.cancelarRecordatorio("${idNormalizado}_post".hashCode);
+    NotificacionesService.cancelarRecordatorio("${idNormalizado}_dia2".hashCode);
+    NotificacionesService.cancelarRecordatorio("${idNormalizado}_dia3".hashCode);
+
     registrarActividad('Canceló el apartado de "${carrito.telefonoCliente}" y devolvió los productos a sus inventarios'); 
     _carritosActivos.remove(idNormalizado);
 

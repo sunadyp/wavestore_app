@@ -4,14 +4,14 @@ class ArticuloVenta {
   final String productoNombre;
   final int cantidad;
   final double precioUnitario;
-  final bool origenConcept; // <-- NUEVO: ¿Viene de la Concept Store?
+  final bool origenConcept;
 
   ArticuloVenta({
     required this.productoId,
     required this.productoNombre,
     required this.cantidad,
     required this.precioUnitario,
-    this.origenConcept = false, // <-- Retrocompatibilidad segura
+    this.origenConcept = false,
   });
 
   double get subtotal => cantidad * precioUnitario;
@@ -35,7 +35,7 @@ class ArticuloVenta {
   }
 }
 
-// Representa una venta en proceso (El Carrito o Apartado Activo)
+// Representa una venta en proceso (El Carrito o Apartado Activo / Agenda)
 class Carrito {
   final String telefonoCliente; 
   List<ArticuloVenta> articulos;
@@ -43,7 +43,12 @@ class Carrito {
   bool descuentoEsPorcentaje;
   double cargoExtra; 
   String conceptoCargoExtra;
-  bool pagoConTarjeta; // <-- NUEVO: Bandera para la comisión
+  bool pagoConTarjeta; 
+  
+  // 🚀 NUEVOS CAMPOS PARA LA AGENDA DE ENTREGAS
+  DateTime? fechaEntrega;
+  String? lugarEntrega;
+  double anticipo;
 
   Carrito({
     required this.telefonoCliente,
@@ -52,7 +57,10 @@ class Carrito {
     this.descuentoEsPorcentaje = false,
     this.cargoExtra = 0.0, 
     this.conceptoCargoExtra = 'Cargo Extra', 
-    this.pagoConTarjeta = false, // Por defecto en efectivo
+    this.pagoConTarjeta = false,
+    this.fechaEntrega,
+    this.lugarEntrega,
+    this.anticipo = 0.0,
   }) : articulos = articulos ?? [];
 
   double get subtotal => articulos.fold(0.0, (sum, item) => sum + item.subtotal);
@@ -61,21 +69,32 @@ class Carrito {
       ? (subtotal * (descuentoValor / 100)) 
       : descuentoValor;
 
-  // Lo que paga el cliente
+  // Lo que debe pagar el cliente en total
   double get total {
     double resultado = subtotal - descuentoMonto + cargoExtra;
     return resultado > 0 ? resultado : 0.0;
   }
 
-  // 🚀 NUEVO: Cálculo exacto de tu Excel (3.5% + 16% IVA)
+  // 🚀 NUEVO: Lo que le falta por pagar
+  double get saldoPendiente {
+    double saldo = total - anticipo;
+    return saldo > 0 ? saldo : 0.0;
+  }
+
+  // 🚀 NUEVO: Estado del pago para la interfaz gráfica
+  String get estadoPago {
+    if (anticipo <= 0) return 'Sin pago';
+    if (anticipo >= total) return 'Liquidado';
+    return 'Abono parcial';
+  }
+
   double get comisionTarjetaMonto {
     if (!pagoConTarjeta) return 0.0;
-    final comisionBase = total * 0.035; // 3.5%
-    final ivaComision = comisionBase * 0.16; // 16% sobre la comisión
+    final comisionBase = total * 0.035; 
+    final ivaComision = comisionBase * 0.16; 
     return comisionBase + ivaComision;
   }
 
-  // Lo que realmente entra a la caja de WaveStore
   double get ingresoNeto => total - comisionTarjetaMonto;
 
   Map<String, dynamic> toMap() => {
@@ -86,6 +105,9 @@ class Carrito {
     'cargoExtra': cargoExtra, 
     'conceptoCargoExtra': conceptoCargoExtra, 
     'pagoConTarjeta': pagoConTarjeta,
+    'fechaEntrega': fechaEntrega?.toIso8601String(), // <-- GUARDAR FECHA
+    'lugarEntrega': lugarEntrega,                    // <-- GUARDAR LUGAR
+    'anticipo': anticipo,                            // <-- GUARDAR ANTICIPO
   };
 
   factory Carrito.fromMap(Map<String, dynamic> map) {
@@ -98,6 +120,9 @@ class Carrito {
       cargoExtra: (map['cargoExtra'] ?? 0.0).toDouble(), 
       conceptoCargoExtra: map['conceptoCargoExtra'] ?? 'Cargo Extra', 
       pagoConTarjeta: map['pagoConTarjeta'] ?? false,
+      fechaEntrega: map['fechaEntrega'] != null ? DateTime.parse(map['fechaEntrega']) : null, // <-- RECUPERAR FECHA
+      lugarEntrega: map['lugarEntrega'],                                                      // <-- RECUPERAR LUGAR
+      anticipo: (map['anticipo'] ?? 0.0).toDouble(),                                          // <-- RECUPERAR ANTICIPO
     );
   }
 }
@@ -110,10 +135,11 @@ class Venta {
   final double descuentoAplicado; 
   final double cargoExtra; 
   final String conceptoCargoExtra; 
-  final double totalFinal; // Lo que pagó el cliente
-  final double comisionTarjeta; // <-- NUEVO: Guardamos cuánto nos quitaron
-  final bool pagoConTarjeta; // <-- NUEVO: Para mostrar el iconito de tarjeta en el historial
+  final double totalFinal; 
+  final double comisionTarjeta; 
+  final bool pagoConTarjeta; 
   final DateTime fecha;
+  final String? lugarEntrega; // 🚀 NUEVO: Útil para historial y reportes
 
   Venta({
     required this.id,
@@ -126,9 +152,9 @@ class Venta {
     this.comisionTarjeta = 0.0,
     this.pagoConTarjeta = false,
     required this.fecha,
+    this.lugarEntrega, // <-- NUEVO
   });
 
-  // Utilidad real sumada a caja
   double get ingresoNeto => totalFinal - comisionTarjeta;
 
   Map<String, dynamic> toMap() => {
@@ -142,6 +168,7 @@ class Venta {
     'comisionTarjeta': comisionTarjeta,
     'pagoConTarjeta': pagoConTarjeta,
     'fecha': fecha.toIso8601String(),
+    'lugarEntrega': lugarEntrega, // <-- GUARDAR
   };
 
   factory Venta.fromMap(Map<String, dynamic> map) {
@@ -157,6 +184,7 @@ class Venta {
       comisionTarjeta: (map['comisionTarjeta'] ?? 0.0).toDouble(),
       pagoConTarjeta: map['pagoConTarjeta'] ?? false,
       fecha: map['fecha'] != null ? DateTime.parse(map['fecha']) : DateTime.now(),
+      lugarEntrega: map['lugarEntrega'], // <-- RECUPERAR
     );
   }
 }
