@@ -535,7 +535,7 @@ final TextEditingController _searchController = TextEditingController();
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     ChoiceChip(
-                      label: const Text('\$ Monto'),
+                      label: const Text('Monto'),
                       selected: !esPorcentaje,
                       onSelected: (val) {
                         setStateDialog(() {
@@ -545,7 +545,7 @@ final TextEditingController _searchController = TextEditingController();
                     ),
                     const SizedBox(width: 10),
                     ChoiceChip(
-                      label: const Text('% Porcentaje'),
+                      label: const Text('Porcentaje'),
                       selected: esPorcentaje,
                       onSelected: (val) {
                         setStateDialog(() {

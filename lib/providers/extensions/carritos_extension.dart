@@ -270,7 +270,7 @@ extension CarritosExtension on InventarioProvider {
     final textoPago = pagoConTarjeta 
         ? '(Tarjeta - Comisión: \$${nuevaVenta.comisionTarjeta.toStringAsFixed(2)})' 
         : '(Efectivo)';
-    registrarActividad('Cobró el carrito de "${carrito.telefonoCliente}" por un total de \$${nuevaVenta.totalFinal.toStringAsFixed(2)} $textoPago');
+    registrarActividad('Cobró el carrito de "${carrito.telefonoCliente}" por un total de \$${nuevaVenta.ingresoNeto.toStringAsFixed(2)} $textoPago');
 
     _estadisticasDesactualizadas = true;
     notifyListeners();

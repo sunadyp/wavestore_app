@@ -42,65 +42,113 @@ class ItemProducto extends StatelessWidget {
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row( 
+          child: Stack(
             children: [
-              Expanded(
+              // CONTENIDO DEL PRODUCTO
+              Padding(
+                padding: const EdgeInsets.only(right: 0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // NOMBRE COMPLETO
                     Text(
-                      producto.nombre, 
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                      maxLines: 1, 
-                      overflow: TextOverflow.ellipsis, 
+                      producto.nombre,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.visible,
                     ),
+
                     const SizedBox(height: 4),
-                    
+
                     Row(
                       children: [
-                        Icon(Icons.home_outlined, size: 14, color: esConceptStore ? Colors.grey : Colors.black),
+                        Icon(
+                          Icons.home_outlined,
+                          size: 14,
+                          color: esConceptStore ? Colors.grey : Colors.black,
+                        ),
                         const SizedBox(width: 4),
-                        Text('${producto.cantidad}', style: TextStyle(fontSize: 13, fontWeight: esConceptStore ? FontWeight.normal : FontWeight.bold)),
+                        Text(
+                          '${producto.cantidad}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: esConceptStore
+                                ? FontWeight.normal
+                                : FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        Icon(Icons.storefront_outlined, size: 14, color: esConceptStore ? Colors.purple : Colors.grey),
+                        Icon(
+                          Icons.storefront_outlined,
+                          size: 14,
+                          color: esConceptStore ? Colors.purple : Colors.grey,
+                        ),
                         const SizedBox(width: 4),
-                        Text('${producto.cantidadConcept}', style: TextStyle(fontSize: 13, fontWeight: esConceptStore ? FontWeight.bold : FontWeight.normal)),
+                        Text(
+                          '${producto.cantidadConcept}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: esConceptStore
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
                       ],
                     ),
-                    
+
                     const SizedBox(height: 2),
+
                     Text(
                       'Precio: \$${producto.precioVenta.toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 13, color: Colors.black87),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black87,
+                      ),
                     ),
+
                     const SizedBox(height: 6),
+
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.1),
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.3)),
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.3),
+                            ),
                           ),
                           child: Text(
                             producto.categoria,
                             style: TextStyle(
-                              fontSize: 10, 
+                              fontSize: 10,
                               color: Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.bold
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
                         Text(
                           'Ganancia: \$${producto.utilidad.toStringAsFixed(2)}',
                           style: const TextStyle(
-                            color: Colors.green, 
-                            fontWeight: FontWeight.w600, 
-                            fontSize: 11
+                            color: Colors.green,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
                           ),
                         ),
                       ],
@@ -108,43 +156,71 @@ class ItemProducto extends StatelessWidget {
                   ],
                 ),
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.swap_horiz, color: Colors.deepPurple, size: 22),
-                    tooltip: 'Transferir stock',
-                    onPressed: () => _abrirTransferencia(context),
-                  ),
-                  IconButton(
-                    visualDensity: VisualDensity.compact, 
-                    icon: const Icon(Icons.add_box, color: Colors.blue, size: 22),
-                    onPressed: () => _reabastecer(context),
-                  ),
-                  // 🚀 BOTÓN DE MERMA/REGALO
-                  if (stockDisponible > 0)
+
+              // ÍCONOS: permanecen A LA DERECHA
+              Positioned(
+                right: 0,
+                top: 35,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.remove_circle_outline, color: Colors.orange, size: 22),
-                      tooltip: 'Registrar Merma o Regalo',
-                      onPressed: () => _abrirSalidaStock(context),
+                      icon: const Icon(
+                        Icons.swap_horiz,
+                        color: Colors.deepPurple,
+                        size: 22,
+                      ),
+                      tooltip: 'Transferir stock',
+                      onPressed: () => _abrirTransferencia(context),
                     ),
-                  if (stockDisponible > 0)
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.point_of_sale, color: Colors.green, size: 22),
-                      onPressed: () => _ejecutarVenta(context, stockDisponible),
+                      icon: const Icon(
+                        Icons.add_box,
+                        color: Colors.blue,
+                        size: 22,
+                      ),
+                      onPressed: () => _reabastecer(context),
                     ),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.edit_outlined, color: Colors.grey, size: 22),
-                    onPressed: () => _abrirEditor(context),
-                  ),
-                ],
+                    if (stockDisponible > 0)
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(
+                          Icons.remove_circle_outline,
+                          color: Colors.orange,
+                          size: 22,
+                        ),
+                        tooltip: 'Registrar Merma o Regalo',
+                        onPressed: () => _abrirSalidaStock(context),
+                      ),
+                    if (stockDisponible > 0)
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(
+                          Icons.point_of_sale,
+                          color: Colors.green,
+                          size: 22,
+                        ),
+                        onPressed: () => _ejecutarVenta(
+                          context,
+                          stockDisponible,
+                        ),
+                      ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: Colors.grey,
+                        size: 22,
+                      ),
+                      onPressed: () => _abrirEditor(context),
+                    ),
+                  ],
+                ),
               ),
             ],
-          ),
+          )
         ),
       ),
     );
