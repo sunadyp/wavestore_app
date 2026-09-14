@@ -106,7 +106,7 @@ class UIUtils {
               
                   TextField(
                     controller: telefonoCtrl,
-                    keyboardType: TextInputType.text, 
+                    keyboardType: TextInputType.text,
                     autofocus: telefonosNormalizados.isEmpty, 
                     decoration: const InputDecoration(
                       labelText: 'Teléfono, Nombre o @usuario', 
