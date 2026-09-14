@@ -1,7 +1,21 @@
 part of '../inventario_provider.dart';
 
 extension CarritosExtension on InventarioProvider {
+
+  // Función helper para normalizar el identificador (Llave del Map)
+  String _normalizarIdentificador(String texto) {
+    String t = texto.trim().toLowerCase();
+    t = t.replaceAll(RegExp(r'[áäâà]'), 'a');
+    t = t.replaceAll(RegExp(r'[éëêè]'), 'e');
+    t = t.replaceAll(RegExp(r'[íïîì]'), 'i');
+    t = t.replaceAll(RegExp(r'[óöôò]'), 'o');
+    t = t.replaceAll(RegExp(r'[úüûù]'), 'u');
+    return t;
+  }
+
   String? agregarAlCarrito(String telefono, Producto producto, int cantidad, {bool origenConcept = false}) {
+    final idNormalizado = _normalizarIdentificador(telefono);
+    
     final indexProducto = _productos.indexWhere((p) => p.id == producto.id);
     if (indexProducto == -1) return 'Producto no encontrado';
 
@@ -9,18 +23,19 @@ extension CarritosExtension on InventarioProvider {
     final stockDisponible = origenConcept ? prodActual.cantidadConcept : prodActual.cantidad;
     if (stockDisponible < cantidad) return 'Stock insuficiente';
 
-    if (_carritosActivos.containsKey(telefono) && _carritosActivos[telefono]!.articulos.isNotEmpty) {
-      final origenActual = _carritosActivos[telefono]!.articulos.first.origenConcept;
+    if (_carritosActivos.containsKey(idNormalizado) && _carritosActivos[idNormalizado]!.articulos.isNotEmpty) {
+      final origenActual = _carritosActivos[idNormalizado]!.articulos.first.origenConcept;
       if (origenActual != origenConcept) {
         return 'No puedes mezclar productos del Principal y Concept Store en un mismo ticket.';
       }
     }
 
-    if (!_carritosActivos.containsKey(telefono)) {
-      _carritosActivos[telefono] = Carrito(telefonoCliente: telefono);
+    if (!_carritosActivos.containsKey(idNormalizado)) {
+      // Usamos la llave normalizada, pero guardamos el texto original (solo sin espacios extra)
+      _carritosActivos[idNormalizado] = Carrito(telefonoCliente: telefono.trim());
     }
 
-    final carrito = _carritosActivos[telefono]!;
+    final carrito = _carritosActivos[idNormalizado]!;
     final indexArticulo = carrito.articulos.indexWhere((a) => a.productoId == producto.id && a.origenConcept == origenConcept);
     
     if (indexArticulo != -1) {
@@ -49,7 +64,7 @@ extension CarritosExtension on InventarioProvider {
     }
     
     final origenTexto = origenConcept ? 'Concept Store' : 'Principal';
-    registrarActividad('Apartó ${cantidad}x "${producto.nombre}" ($origenTexto) en el carrito de "$telefono"'); 
+    registrarActividad('Apartó ${cantidad}x "${producto.nombre}" ($origenTexto) en el carrito de "${carrito.telefonoCliente}"'); 
 
     notifyListeners();
     
@@ -61,9 +76,10 @@ extension CarritosExtension on InventarioProvider {
   }
 
   void eliminarArticuloDeCarrito(String identificador, ArticuloVenta articulo) {
-    if (!_carritosActivos.containsKey(identificador)) return;
+    final idNormalizado = _normalizarIdentificador(identificador);
+    if (!_carritosActivos.containsKey(idNormalizado)) return;
 
-    final carrito = _carritosActivos[identificador]!;
+    final carrito = _carritosActivos[idNormalizado]!;
     carrito.articulos.removeWhere((a) => a.productoId == articulo.productoId && a.origenConcept == articulo.origenConcept);
 
     final indexProd = _productos.indexWhere((p) => p.id == articulo.productoId);
@@ -77,10 +93,10 @@ extension CarritosExtension on InventarioProvider {
     }
 
     if (carrito.articulos.isEmpty) {
-      _carritosActivos.remove(identificador);
-      registrarActividad('Se eliminó el último artículo del apartado de "$identificador" y el carrito fue cancelado');
+      _carritosActivos.remove(idNormalizado);
+      registrarActividad('Se eliminó el último artículo del apartado de "${carrito.telefonoCliente}" y el carrito fue cancelado');
     } else {
-      registrarActividad('Eliminó ${articulo.cantidad}x "${articulo.productoNombre}" del apartado de "$identificador"');
+      registrarActividad('Eliminó ${articulo.cantidad}x "${articulo.productoNombre}" del apartado de "${carrito.telefonoCliente}"');
     }
 
     notifyListeners();
@@ -90,8 +106,9 @@ extension CarritosExtension on InventarioProvider {
   }
 
   void aplicarDescuentoACarrito(String identificador, double valor, bool esPorcentaje) {
-    if (_carritosActivos.containsKey(identificador)) {
-      final carrito = _carritosActivos[identificador]!;
+    final idNormalizado = _normalizarIdentificador(identificador);
+    if (_carritosActivos.containsKey(idNormalizado)) {
+      final carrito = _carritosActivos[idNormalizado]!;
       final descuentoAnterior = carrito.descuentoEsPorcentaje 
           ? '${carrito.descuentoValor}%' 
           : '\$${carrito.descuentoValor.toStringAsFixed(2)}';
@@ -104,9 +121,9 @@ extension CarritosExtension on InventarioProvider {
       carrito.descuentoEsPorcentaje = esPorcentaje;
       
       if (valor == 0) {
-        registrarActividad('Eliminó el descuento del apartado de "$identificador"');
+        registrarActividad('Eliminó el descuento del apartado de "${carrito.telefonoCliente}"');
       } else {
-        registrarActividad('Cambió descuento en apartado de "$identificador": $descuentoAnterior -> $descuentoNuevo');
+        registrarActividad('Cambió descuento en apartado de "${carrito.telefonoCliente}": $descuentoAnterior -> $descuentoNuevo');
       }
 
       notifyListeners();
@@ -116,12 +133,14 @@ extension CarritosExtension on InventarioProvider {
   }
 
   void aplicarCargoExtraACarrito(String identificador, double cargo, String concepto) {
-    if (_carritosActivos.containsKey(identificador)) {
-      _carritosActivos[identificador]!.cargoExtra = cargo;
+    final idNormalizado = _normalizarIdentificador(identificador);
+    if (_carritosActivos.containsKey(idNormalizado)) {
+      final carrito = _carritosActivos[idNormalizado]!;
+      carrito.cargoExtra = cargo;
       final desc = concepto.isEmpty ? 'Cargo Extra' : concepto;
-      _carritosActivos[identificador]!.conceptoCargoExtra = desc;
+      carrito.conceptoCargoExtra = desc;
       
-      registrarActividad('Aplicó un cargo de \$${cargo.toStringAsFixed(2)} por "$desc" al carrito de "$identificador"'); 
+      registrarActividad('Aplicó un cargo de \$${cargo.toStringAsFixed(2)} por "$desc" al carrito de "${carrito.telefonoCliente}"'); 
 
       notifyListeners();
       final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
@@ -130,9 +149,10 @@ extension CarritosExtension on InventarioProvider {
   }
 
   void cobrarCarrito(String identificador, {bool pagoConTarjeta = false}) {
-    if (!_carritosActivos.containsKey(identificador)) return;
+    final idNormalizado = _normalizarIdentificador(identificador);
+    if (!_carritosActivos.containsKey(idNormalizado)) return;
 
-    final carrito = _carritosActivos[identificador]!;
+    final carrito = _carritosActivos[idNormalizado]!;
     carrito.pagoConTarjeta = pagoConTarjeta; 
 
     final nuevaVenta = Venta(
@@ -151,12 +171,12 @@ extension CarritosExtension on InventarioProvider {
     _ventas.add(nuevaVenta);
     
     _dineroEnCaja += nuevaVenta.ingresoNeto; 
-    _carritosActivos.remove(identificador);
+    _carritosActivos.remove(idNormalizado);
     
     final textoPago = pagoConTarjeta 
         ? '(Tarjeta - Comisión: \$${nuevaVenta.comisionTarjeta.toStringAsFixed(2)})' 
         : '(Efectivo)';
-    registrarActividad('Cobró el carrito de "$identificador" por un total de \$${nuevaVenta.totalFinal.toStringAsFixed(2)} $textoPago');
+    registrarActividad('Cobró el carrito de "${carrito.telefonoCliente}" por un total de \$${nuevaVenta.totalFinal.toStringAsFixed(2)} $textoPago');
 
     _estadisticasDesactualizadas = true;
     notifyListeners();
@@ -168,8 +188,9 @@ extension CarritosExtension on InventarioProvider {
   }
 
   void cancelarCarrito(String identificador) {
-    if (!_carritosActivos.containsKey(identificador)) return;
-    final carrito = _carritosActivos[identificador]!;
+    final idNormalizado = _normalizarIdentificador(identificador);
+    if (!_carritosActivos.containsKey(idNormalizado)) return;
+    final carrito = _carritosActivos[idNormalizado]!;
     
     for (var articulo in carrito.articulos) {
       final index = _productos.indexWhere((p) => p.id == articulo.productoId);
@@ -182,9 +203,9 @@ extension CarritosExtension on InventarioProvider {
         }
       }
     }
-    _carritosActivos.remove(identificador);
     
-    registrarActividad('Canceló el apartado de "$identificador" y devolvió los productos a sus inventarios'); 
+    registrarActividad('Canceló el apartado de "${carrito.telefonoCliente}" y devolvió los productos a sus inventarios'); 
+    _carritosActivos.remove(idNormalizado);
 
     notifyListeners();
     
