@@ -12,34 +12,29 @@ extension CarritosExtension on InventarioProvider {
     return t;
   }
 
-  // 🚀 NUEVO: Función para encontrar tickets viejos (fantasmas)
   String _obtenerKeyReal(String identificador) {
     final idNormalizado = _normalizarIdentificador(identificador);
     if (_carritosActivos.containsKey(idNormalizado)) return idNormalizado;
-    if (_carritosActivos.containsKey(identificador)) return identificador; // ¡Atrapa al fantasma!
+    if (_carritosActivos.containsKey(identificador)) return identificador; 
     return idNormalizado;
   }
 
-  void actualizarLogistica(String identificador, {DateTime? fechaEntrega, String? lugarEntrega}) {
+  Future<void> actualizarLogistica(String identificador, {DateTime? fechaEntrega, String? lugarEntrega}) async {
     final keyCart = _obtenerKeyReal(identificador);
     if (_carritosActivos.containsKey(keyCart)) {
       final carrito = _carritosActivos[keyCart]!;
       
       if (fechaEntrega != null) {
         carrito.fechaEntrega = fechaEntrega;
-        
         NotificacionesService.cancelarRecordatorio("${keyCart}_dia2".hashCode);
         NotificacionesService.cancelarRecordatorio("${keyCart}_dia3".hashCode);
-
         final lugarText = lugarEntrega != null && lugarEntrega.isNotEmpty ? ' en $lugarEntrega' : '';
-        
         NotificacionesService.programarRecordatorio(
           id: "${keyCart}_pre".hashCode, 
           titulo: '📦 Próxima Entrega',
           cuerpo: 'En 1 hora tienes una entrega con ${carrito.telefonoCliente}$lugarText.',
           fechaProgramada: fechaEntrega.subtract(const Duration(hours: 1)),
         );
-
         NotificacionesService.programarRecordatorio(
           id: "${keyCart}_post".hashCode, 
           titulo: '✅ ¿Se concretó la entrega?',
@@ -50,15 +45,16 @@ extension CarritosExtension on InventarioProvider {
       
       if (lugarEntrega != null) carrito.lugarEntrega = lugarEntrega;
 
-      registrarActividad('Actualizó la entrega de "${carrito.telefonoCliente}" para el ${carrito.fechaEntrega?.day}/${carrito.fechaEntrega?.month} en ${carrito.lugarEntrega ?? "lugar por definir"}');
-
-      notifyListeners();
+      await registrarActividad('Actualizó la entrega de "${carrito.telefonoCliente}" para el ${carrito.fechaEntrega?.day}/${carrito.fechaEntrega?.month} en ${carrito.lugarEntrega ?? "lugar por definir"}');
+      
       final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
-      _storage.guardarCarritosActivos(mapAGuardar);
+      await _storage.guardarCarritosActivos(mapAGuardar);
+      
+      notifyListeners();
     }
   }
 
-  void registrarAnticipo(String identificador, double monto) {
+  Future<void> registrarAnticipo(String identificador, double monto) async {
     final keyCart = _obtenerKeyReal(identificador);
     if (_carritosActivos.containsKey(keyCart) && monto > 0) {
       final carrito = _carritosActivos[keyCart]!;
@@ -66,18 +62,18 @@ extension CarritosExtension on InventarioProvider {
       carrito.anticipo += monto;
       _dineroEnCaja += monto;
 
-      registrarActividad('Recibió un anticipo de \$${monto.toStringAsFixed(2)} del apartado de "${carrito.telefonoCliente}"');
+      await registrarActividad('Recibió un anticipo de \$${monto.toStringAsFixed(2)} del apartado de "${carrito.telefonoCliente}"');
+      await _storage.guardarCaja(_dineroEnCaja);
+      
+      final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+      await _storage.guardarCarritosActivos(mapAGuardar);
 
       notifyListeners();
-      _storage.guardarCaja(_dineroEnCaja);
-      final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
-      _storage.guardarCarritosActivos(mapAGuardar);
     }
   }
 
-  String? agregarAlCarrito(String telefono, Producto producto, int cantidad, {bool origenConcept = false}) {
+  Future<String?> agregarAlCarrito(String telefono, Producto producto, int cantidad, {bool origenConcept = false}) async {
     final idNormalizado = _normalizarIdentificador(telefono);
-    
     final indexProducto = _productos.indexWhere((p) => p.id == producto.id);
     if (indexProducto == -1) return 'Producto no encontrado';
 
@@ -93,16 +89,13 @@ extension CarritosExtension on InventarioProvider {
     }
 
     if (!_carritosActivos.containsKey(idNormalizado)) {
-      // 🚀 AQUÍ CONVERTIMOS EL NOMBRE A MAYÚSCULAS
       _carritosActivos[idNormalizado] = Carrito(telefonoCliente: telefono.trim().toUpperCase());
-
       NotificacionesService.programarRecordatorio(
         id: "${idNormalizado}_dia2".hashCode,
         titulo: '⚠️ Apartado sin fecha',
         cuerpo: 'Tienes un apartado de "${telefono.trim().toUpperCase()}" sin fecha desde hace 2 días. ¿Sigue en pie?',
         fechaProgramada: DateTime.now().add(const Duration(days: 2)),
       );
-
       NotificacionesService.programarRecordatorio(
         id: "${idNormalizado}_dia3".hashCode,
         titulo: '🚨 Apartado olvidado',
@@ -140,18 +133,17 @@ extension CarritosExtension on InventarioProvider {
     }
     
     final origenTexto = origenConcept ? 'Concept Store' : 'Principal';
-    registrarActividad('Apartó ${cantidad}x "${producto.nombre}" ($origenTexto) en el carrito de "${carrito.telefonoCliente}"'); 
+    await registrarActividad('Apartó ${cantidad}x "${producto.nombre}" ($origenTexto) en el carrito de "${carrito.telefonoCliente}"'); 
+
+    await _storage.guardarProductos(_productos);
+    final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+    await _storage.guardarCarritosActivos(mapAGuardar);
 
     notifyListeners();
-    
-    _storage.guardarProductos(_productos);
-    final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
-    _storage.guardarCarritosActivos(mapAGuardar);
-
     return null; 
   }
 
-  void eliminarArticuloDeCarrito(String identificador, ArticuloVenta articulo) {
+  Future<void> eliminarArticuloDeCarrito(String identificador, ArticuloVenta articulo) async {
     final keyCart = _obtenerKeyReal(identificador);
     if (!_carritosActivos.containsKey(keyCart)) return;
 
@@ -171,7 +163,7 @@ extension CarritosExtension on InventarioProvider {
     if (carrito.articulos.isEmpty) {
       if (carrito.anticipo > 0) {
         _dineroEnCaja -= carrito.anticipo;
-        _storage.guardarCaja(_dineroEnCaja);
+        await _storage.guardarCaja(_dineroEnCaja);
       }
       
       NotificacionesService.cancelarRecordatorio("${keyCart}_pre".hashCode);
@@ -180,45 +172,44 @@ extension CarritosExtension on InventarioProvider {
       NotificacionesService.cancelarRecordatorio("${keyCart}_dia3".hashCode);
 
       _carritosActivos.remove(keyCart);
-      registrarActividad('Se eliminó el último artículo del apartado de "${carrito.telefonoCliente}" y el carrito fue cancelado');
+      await registrarActividad('Se eliminó el último artículo del apartado de "${carrito.telefonoCliente}" y el carrito fue cancelado');
     } else {
-      registrarActividad('Eliminó ${articulo.cantidad}x "${articulo.productoNombre}" del apartado de "${carrito.telefonoCliente}"');
+      await registrarActividad('Eliminó ${articulo.cantidad}x "${articulo.productoNombre}" del apartado de "${carrito.telefonoCliente}"');
     }
 
-    notifyListeners();
-    _storage.guardarProductos(_productos);
+    await _storage.guardarProductos(_productos);
     final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
-    _storage.guardarCarritosActivos(mapAGuardar);
+    await _storage.guardarCarritosActivos(mapAGuardar);
+
+    notifyListeners();
   }
 
-  void aplicarDescuentoACarrito(String identificador, double valor, bool esPorcentaje) {
+  Future<void> aplicarDescuentoACarrito(String identificador, double valor, bool esPorcentaje) async {
     final keyCart = _obtenerKeyReal(identificador);
     if (_carritosActivos.containsKey(keyCart)) {
       final carrito = _carritosActivos[keyCart]!;
       final descuentoAnterior = carrito.descuentoEsPorcentaje 
           ? '${carrito.descuentoValor}%' 
           : '\$${carrito.descuentoValor.toStringAsFixed(2)}';
-      
-      final descuentoNuevo = esPorcentaje 
-          ? '$valor%' 
-          : '\$${valor.toStringAsFixed(2)}';
+      final descuentoNuevo = esPorcentaje ? '$valor%' : '\$${valor.toStringAsFixed(2)}';
 
       carrito.descuentoValor = valor;
       carrito.descuentoEsPorcentaje = esPorcentaje;
       
       if (valor == 0) {
-        registrarActividad('Eliminó el descuento del apartado de "${carrito.telefonoCliente}"');
+        await registrarActividad('Eliminó el descuento del apartado de "${carrito.telefonoCliente}"');
       } else {
-        registrarActividad('Cambió descuento en apartado de "${carrito.telefonoCliente}": $descuentoAnterior -> $descuentoNuevo');
+        await registrarActividad('Cambió descuento en apartado de "${carrito.telefonoCliente}": $descuentoAnterior -> $descuentoNuevo');
       }
 
-      notifyListeners();
       final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
-      _storage.guardarCarritosActivos(mapAGuardar);
+      await _storage.guardarCarritosActivos(mapAGuardar);
+
+      notifyListeners();
     }
   }
 
-  void aplicarCargoExtraACarrito(String identificador, double cargo, String concepto) {
+  Future<void> aplicarCargoExtraACarrito(String identificador, double cargo, String concepto) async {
     final keyCart = _obtenerKeyReal(identificador);
     if (_carritosActivos.containsKey(keyCart)) {
       final carrito = _carritosActivos[keyCart]!;
@@ -226,15 +217,16 @@ extension CarritosExtension on InventarioProvider {
       final desc = concepto.isEmpty ? 'Cargo Extra' : concepto;
       carrito.conceptoCargoExtra = desc;
       
-      registrarActividad('Aplicó un cargo de \$${cargo.toStringAsFixed(2)} por "$desc" al carrito de "${carrito.telefonoCliente}"'); 
+      await registrarActividad('Aplicó un cargo de \$${cargo.toStringAsFixed(2)} por "$desc" al carrito de "${carrito.telefonoCliente}"'); 
+
+      final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
+      await _storage.guardarCarritosActivos(mapAGuardar);
 
       notifyListeners();
-      final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
-      _storage.guardarCarritosActivos(mapAGuardar);
     }
   }
 
-  void cobrarCarrito(String identificador, {bool pagoConTarjeta = false}) {
+  Future<void> cobrarCarrito(String identificador, {bool pagoConTarjeta = false}) async {
     final keyCart = _obtenerKeyReal(identificador);
     if (!_carritosActivos.containsKey(keyCart)) return;
 
@@ -270,18 +262,19 @@ extension CarritosExtension on InventarioProvider {
     final textoPago = pagoConTarjeta 
         ? '(Tarjeta - Comisión: \$${nuevaVenta.comisionTarjeta.toStringAsFixed(2)})' 
         : '(Efectivo)';
-    registrarActividad('Cobró el carrito de "${carrito.telefonoCliente}" por un total de \$${nuevaVenta.ingresoNeto.toStringAsFixed(2)} $textoPago');
+    await registrarActividad('Cobró el carrito de "${carrito.telefonoCliente}" por un total de \$${nuevaVenta.ingresoNeto.toStringAsFixed(2)} $textoPago');
 
     _estadisticasDesactualizadas = true;
-    notifyListeners();
     
-    _storage.guardarVentas(_ventas);
-    _storage.guardarCaja(_dineroEnCaja);
+    await _storage.guardarVentas(_ventas);
+    await _storage.guardarCaja(_dineroEnCaja);
     final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
-    _storage.guardarCarritosActivos(mapAGuardar);
+    await _storage.guardarCarritosActivos(mapAGuardar);
+
+    notifyListeners();
   }
 
-  void cancelarCarrito(String identificador) {
+  Future<void> cancelarCarrito(String identificador) async {
     final keyCart = _obtenerKeyReal(identificador);
     if (!_carritosActivos.containsKey(keyCart)) return;
     final carrito = _carritosActivos[keyCart]!;
@@ -300,7 +293,7 @@ extension CarritosExtension on InventarioProvider {
     
     if (carrito.anticipo > 0) {
       _dineroEnCaja -= carrito.anticipo;
-      _storage.guardarCaja(_dineroEnCaja);
+      await _storage.guardarCaja(_dineroEnCaja);
     }
 
     NotificacionesService.cancelarRecordatorio("${keyCart}_pre".hashCode);
@@ -308,17 +301,17 @@ extension CarritosExtension on InventarioProvider {
     NotificacionesService.cancelarRecordatorio("${keyCart}_dia2".hashCode);
     NotificacionesService.cancelarRecordatorio("${keyCart}_dia3".hashCode);
 
-    registrarActividad('Canceló el apartado de "${carrito.telefonoCliente}" y devolvió los productos a sus inventarios'); 
+    await registrarActividad('Canceló el apartado de "${carrito.telefonoCliente}" y devolvió los productos a sus inventarios'); 
     _carritosActivos.remove(keyCart);
 
-    notifyListeners();
-    
-    _storage.guardarProductos(_productos);
+    await _storage.guardarProductos(_productos);
     final mapAGuardar = _carritosActivos.map((key, value) => MapEntry(key, value.toMap()));
-    _storage.guardarCarritosActivos(mapAGuardar);
+    await _storage.guardarCarritosActivos(mapAGuardar);
+
+    notifyListeners();
   }
 
-  void revertirVenta(String idVenta) {
+  Future<void> revertirVenta(String idVenta) async {
     final indexVenta = _ventas.indexWhere((v) => v.id == idVenta);
     if (indexVenta == -1) return;
 
@@ -338,13 +331,14 @@ extension CarritosExtension on InventarioProvider {
     _dineroEnCaja -= ventaARevertir.ingresoNeto; 
     _ventas.removeAt(indexVenta);
     
-    registrarActividad('Revirtió la venta hecha a "${ventaARevertir.telefonoCliente}" de \$${ventaARevertir.totalFinal.toStringAsFixed(2)}'); 
+    await registrarActividad('Revirtió la venta hecha a "${ventaARevertir.telefonoCliente}" de \$${ventaARevertir.totalFinal.toStringAsFixed(2)}'); 
 
     _estadisticasDesactualizadas = true;
-    notifyListeners();
 
-    _storage.guardarProductos(_productos);
-    _storage.guardarVentas(_ventas);
-    _storage.guardarCaja(_dineroEnCaja);
+    await _storage.guardarProductos(_productos);
+    await _storage.guardarVentas(_ventas);
+    await _storage.guardarCaja(_dineroEnCaja);
+
+    notifyListeners();
   }
 }

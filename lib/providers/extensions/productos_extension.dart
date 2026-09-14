@@ -1,14 +1,13 @@
 part of '../inventario_provider.dart';
 
 extension ProductosExtension on InventarioProvider {
-  void agregarProducto(Producto nuevo, {bool afectaCaja = true}) {
+  Future<void> agregarProducto(Producto nuevo, {bool afectaCaja = true}) async {
     _productos.add(nuevo);
-    
     double gastoPorInventario = nuevo.costo * nuevo.cantidad;
     
     if (afectaCaja) {
       _dineroEnCaja -= gastoPorInventario;
-      _storage.guardarCaja(_dineroEnCaja);
+      await _storage.guardarCaja(_dineroEnCaja);
     }
     
     _movimientos.add(Movimiento(
@@ -23,15 +22,16 @@ extension ProductosExtension on InventarioProvider {
       cantidadArticulos: nuevo.cantidad, 
       afectoCaja: afectaCaja, 
     ));
-    _storage.guardarMovimientos(_movimientos);
+    await _storage.guardarMovimientos(_movimientos);
     
-    registrarActividad('Creó el producto "${nuevo.nombre}" con ${nuevo.cantidad} unidades en stock');
+    await registrarActividad('Creó el producto "${nuevo.nombre}" con ${nuevo.cantidad} unidades en stock');
     _estadisticasDesactualizadas = true;
+    
+    await _storage.guardarProductos(_productos);
     notifyListeners();
-    _storage.guardarProductos(_productos);
   }
 
-  void editarProducto(String id, Producto editado) {
+  Future<void> editarProducto(String id, Producto editado) async {
     final index = _productos.indexWhere((p) => p.id == id);
     if (index != -1) {
       final pAntiguo = _productos[index];
@@ -46,29 +46,28 @@ extension ProductosExtension on InventarioProvider {
 
       if (cambios.isNotEmpty) {
         final detalleCambios = cambios.join(', ');
-        registrarActividad('Editó "${pAntiguo.nombre}" | $detalleCambios');
+        await registrarActividad('Editó "${pAntiguo.nombre}" | $detalleCambios');
       }
 
       _productos[index] = editado;
+      await _storage.guardarProductos(_productos);
       notifyListeners();
-      _storage.guardarProductos(_productos);
     }
   }
 
-  void eliminarProducto(String id) {
+  Future<void> eliminarProducto(String id) async {
     final index = _productos.indexWhere((p) => p.id == id);
     if (index != -1) {
       final nombre = _productos[index].nombre;
       _productos.removeAt(index);
       
-      registrarActividad('Eliminó el producto "$nombre" del inventario'); 
-      
+      await registrarActividad('Eliminó el producto "$nombre" del inventario'); 
+      await _storage.guardarProductos(_productos);
       notifyListeners();
-      _storage.guardarProductos(_productos);
     }
   }
 
-  void reabastecerProducto(String id, int cantidadEntrante, double costoUnitarioEntrante, {bool afectaCaja = true}) {
+  Future<void> reabastecerProducto(String id, int cantidadEntrante, double costoUnitarioEntrante, {bool afectaCaja = true}) async {
     final index = _productos.indexWhere((p) => p.id == id);
     if (index != -1) {
       final prod = _productos[index];
@@ -87,7 +86,7 @@ extension ProductosExtension on InventarioProvider {
 
       if (afectaCaja) {
         _dineroEnCaja -= gastoPorReabastecer;
-        _storage.guardarCaja(_dineroEnCaja);
+        await _storage.guardarCaja(_dineroEnCaja);
       }
       
       _movimientos.add(Movimiento(
@@ -103,21 +102,21 @@ extension ProductosExtension on InventarioProvider {
         afectoCaja: afectaCaja, 
       ));
       
-      _storage.guardarMovimientos(_movimientos);
+      await _storage.guardarMovimientos(_movimientos);
       
-      registrarActividad(
+      await registrarActividad(
         'Reabasteció "${prod.nombre}" (+$cantidadEntrante al Principal). '
         'Stock Principal: ${prod.cantidad} -> $nuevoStockTotal. '
         'Costo prom: \$${prod.costo.toStringAsFixed(2)} -> \$${nuevoCostoPromedio.toStringAsFixed(2)}'
       );
 
       _estadisticasDesactualizadas = true;
+      await _storage.guardarProductos(_productos);
       notifyListeners();
-      _storage.guardarProductos(_productos);
     }
   }
 
-  void transferirStock(String id, int cantidad, bool haciaConcept) {
+  Future<void> transferirStock(String id, int cantidad, bool haciaConcept) async {
     final index = _productos.indexWhere((p) => p.id == id);
     if (index != -1) {
       final prod = _productos[index];
@@ -149,22 +148,21 @@ extension ProductosExtension on InventarioProvider {
         afectoCaja: false, 
       ));
 
-      registrarActividad('Transfirió $cantidad unidades de "${prod.nombre}" de $origen');
+      await registrarActividad('Transfirió $cantidad unidades de "${prod.nombre}" de $origen');
 
       _estadisticasDesactualizadas = true;
+      await _storage.guardarProductos(_productos);
+      await _storage.guardarMovimientos(_movimientos);
       notifyListeners();
-      _storage.guardarProductos(_productos);
-      _storage.guardarMovimientos(_movimientos);
     }
   }
 
-  void revertirMovimiento(String idMovimiento) {
+  Future<void> revertirMovimiento(String idMovimiento) async {
     final indexMov = _movimientos.indexWhere((m) => m.id == idMovimiento);
     if (indexMov == -1) return;
 
     final mov = _movimientos[indexMov];
 
-    // 1. Revertir el dinero (si aplicó a la caja)
     if (mov.afectoCaja) {
       if (mov.esInversion) {
         _dineroEnCaja -= mov.monto; 
@@ -173,46 +171,33 @@ extension ProductosExtension on InventarioProvider {
       }
     }
 
-    // 2. Revertir el stock (si el movimiento afectó un producto)
     if (mov.productoId != null && mov.cantidadArticulos != null) {
       final indexProd = _productos.indexWhere((p) => p.id == mov.productoId);
       
       if (indexProd != -1) {
         final prod = _productos[indexProd];
-        
-        // Verificamos si es una Merma/Salida para SUMAR en lugar de RESTAR
         final bool esSalidaDeStock = mov.descripcion.startsWith('Salida de stock');
         
         if (esSalidaDeStock) {
-          // 🚀 SI ERA UNA MERMA: Devolvemos el stock al inventario original
           final bool eraDeConcept = mov.descripcion.contains('(Concept Store)');
-          
           if (eraDeConcept) {
-             _productos[indexProd] = prod.copyWith(
-               cantidadConcept: prod.cantidadConcept + mov.cantidadArticulos!
-             );
+             _productos[indexProd] = prod.copyWith(cantidadConcept: prod.cantidadConcept + mov.cantidadArticulos!);
           } else {
-             _productos[indexProd] = prod.copyWith(
-               cantidad: prod.cantidad + mov.cantidadArticulos!
-             );
+             _productos[indexProd] = prod.copyWith(cantidad: prod.cantidad + mov.cantidadArticulos!);
           }
         } else {
-          // 🚀 SI ERA UNA COMPRA O INGRESO: Le quitamos el stock (Lógica original)
           final stockOriginal = prod.cantidad - mov.cantidadArticulos!;
           double costoOriginal = 0.0;
-          
           if (stockOriginal > 0) {
             costoOriginal = ((prod.costo * prod.cantidad) - mov.monto) / stockOriginal;
             if (costoOriginal < 0) costoOriginal = 0.0; 
           }
-
           _productos[indexProd] = prod.copyWith(
             cantidad: stockOriginal < 0 ? 0 : stockOriginal,
             costo: costoOriginal,
           );
         }
-        
-        _storage.guardarProductos(_productos);
+        await _storage.guardarProductos(_productos);
       }
     }
 
@@ -222,21 +207,18 @@ extension ProductosExtension on InventarioProvider {
         ? 'y se ajustó la caja por \$${mov.monto.toStringAsFixed(2)}' 
         : 'sin alterar el saldo de la caja';
         
-    registrarActividad('Revirtió el movimiento: "${mov.descripcion}" $textoCaja');
+    await registrarActividad('Revirtió el movimiento: "${mov.descripcion}" $textoCaja');
 
     _estadisticasDesactualizadas = true;
+    await _storage.guardarCaja(_dineroEnCaja);
+    await _storage.guardarMovimientos(_movimientos);
     notifyListeners();
-    
-    _storage.guardarCaja(_dineroEnCaja);
-    _storage.guardarMovimientos(_movimientos);
   }
 
-  void registrarSalida(String id, int cantidad, String motivo, {bool deConceptStore = false}) {
+  Future<void> registrarSalida(String id, int cantidad, String motivo, {bool deConceptStore = false}) async {
     final index = _productos.indexWhere((p) => p.id == id);
     if (index != -1) {
       final prod = _productos[index];
-      
-      // 1. Restamos del inventario correspondiente
       if (deConceptStore) {
         _productos[index] = prod.copyWith(cantidadConcept: prod.cantidadConcept - cantidad);
       } else {
@@ -244,8 +226,6 @@ extension ProductosExtension on InventarioProvider {
       }
 
       final origen = deConceptStore ? 'Concept Store' : 'Principal';
-
-      // 2. Registramos el movimiento en $0.00 para no afectar la caja ni inflar ventas
       _movimientos.add(Movimiento(
         id: _uuid.v4(),
         descripcion: 'Salida de stock ($origen): ${prod.nombre} - $motivo',
@@ -257,13 +237,12 @@ extension ProductosExtension on InventarioProvider {
         afectoCaja: false, 
       ));
 
-      // 3. Bitácora
-      registrarActividad('Registró salida de ${cantidad}x "${prod.nombre}" ($origen). Motivo: $motivo');
+      await registrarActividad('Registró salida de ${cantidad}x "${prod.nombre}" ($origen). Motivo: $motivo');
 
       _estadisticasDesactualizadas = true;
+      await _storage.guardarProductos(_productos);
+      await _storage.guardarMovimientos(_movimientos);
       notifyListeners();
-      _storage.guardarProductos(_productos);
-      _storage.guardarMovimientos(_movimientos);
     }
   }
 }

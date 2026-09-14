@@ -1,28 +1,25 @@
 part of '../inventario_provider.dart';
 
 extension BitacoraExtension on InventarioProvider {
-  // ==========================================================
-  // --- MOTOR DE AUDITORÍA (BITÁCORA) ---
-  // ==========================================================
-  void registrarActividad(String descripcion) {
+  
+  Future<void> registrarActividad(String descripcion) async {
     _actividades.insert(0, Actividad(
       id: _uuid.v4(),
       descripcion: descripcion,
       fecha: DateTime.now(),
     ));
 
-    // Mantenemos solo los últimos 1000 registros para cuidar la RAM
     if (_actividades.length > 1000) {
       _actividades = _actividades.sublist(0, 1000);
     }
 
-    _storage.guardarActividades(_actividades);
+    await _storage.guardarActividades(_actividades);
     notifyListeners(); 
   }
 
-  void limpiarBitacora() {
+  Future<void> limpiarBitacora() async {
     _actividades.clear();
-    _storage.guardarActividades(_actividades);
+    await _storage.guardarActividades(_actividades);
     notifyListeners();
   }
 
@@ -31,24 +28,24 @@ extension BitacoraExtension on InventarioProvider {
     notifyListeners();
   }
 
-  void agregarCategoria(String nombre) {
+  Future<void> agregarCategoria(String nombre) async {
     if (nombre.isNotEmpty && !_categorias.contains(nombre)) {
       _categorias.add(nombre);
-      registrarActividad('Agregó la categoría "$nombre"'); 
+      await registrarActividad('Agregó la categoría "$nombre"'); 
+      await _storage.guardarCategorias(_categorias);
       notifyListeners();
-      _storage.guardarCategorias(_categorias);
     }
   }
 
-  void agregarSaldoInicial(double saldo) {
+  Future<void> agregarSaldoInicial(double saldo) async {
     _dineroEnCaja = saldo;
     _estadisticasDesactualizadas = true;
-    registrarActividad('Configuró el saldo inicial en \$${saldo.toStringAsFixed(2)}');
+    await registrarActividad('Configuró el saldo inicial en \$${saldo.toStringAsFixed(2)}');
+    await _storage.guardarCaja(_dineroEnCaja);
     notifyListeners();
-    _storage.guardarCaja(_dineroEnCaja);
   }
 
-  void registrarGasto(double monto, String descripcion) {
+  Future<void> registrarGasto(double monto, String descripcion) async {
     _dineroEnCaja -= monto;
     final nombreDesc = descripcion.isEmpty ? 'Gasto general' : descripcion;
     _movimientos.add(Movimiento(
@@ -59,15 +56,15 @@ extension BitacoraExtension on InventarioProvider {
       esInversion: false,
     ));
     
-    registrarActividad('Registró un gasto de \$${monto.toStringAsFixed(2)} por "$nombreDesc"'); 
+    await registrarActividad('Registró un gasto de \$${monto.toStringAsFixed(2)} por "$nombreDesc"'); 
+    await _storage.guardarCaja(_dineroEnCaja);
+    await _storage.guardarMovimientos(_movimientos);
 
     _estadisticasDesactualizadas = true;
     notifyListeners();
-    _storage.guardarCaja(_dineroEnCaja);
-    _storage.guardarMovimientos(_movimientos);
   }
 
-  void registrarInversion(double monto, String descripcion) {
+  Future<void> registrarInversion(double monto, String descripcion) async {
     _dineroEnCaja += monto;
     final nombreDesc = descripcion.isEmpty ? 'Inversión' : descripcion;
     _movimientos.add(Movimiento(
@@ -78,11 +75,11 @@ extension BitacoraExtension on InventarioProvider {
       esInversion: true,
     ));
     
-    registrarActividad('Registró un ingreso/inversión de \$${monto.toStringAsFixed(2)} por "$nombreDesc"'); 
+    await registrarActividad('Registró un ingreso/inversión de \$${monto.toStringAsFixed(2)} por "$nombreDesc"'); 
+    await _storage.guardarCaja(_dineroEnCaja);
+    await _storage.guardarMovimientos(_movimientos);
 
     _estadisticasDesactualizadas = true;
     notifyListeners();
-    _storage.guardarCaja(_dineroEnCaja);
-    _storage.guardarMovimientos(_movimientos);
   }
 }

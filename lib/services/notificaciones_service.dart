@@ -10,8 +10,8 @@ class NotificacionesService {
     // Ajusta la zona horaria local (GTM-6)
     tz.setLocalLocation(tz.getLocation('America/Mexico_City'));
 
-    // Icono por defecto en Android (el de tu app)
-    const AndroidInitializationSettings androidConfig = AndroidInitializationSettings('@mipmap/ic_launcher');
+    // 🚀 CORRECCIÓN: Apuntando al ícono real de tu app que no es borrado por R8
+    const AndroidInitializationSettings androidConfig = AndroidInitializationSettings('@mipmap/launcher_icon');
     
     // Configuración para iOS
     const DarwinInitializationSettings iosConfig = DarwinInitializationSettings(
@@ -25,7 +25,6 @@ class NotificacionesService {
       iOS: iosConfig,
     );
 
-    // 🚀 CORRECCIÓN: El parámetro correcto es 'settings'
     await _notificacionesPlugin.initialize(
       settings: initSettings,
     );

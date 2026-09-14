@@ -46,7 +46,7 @@ class DashboardScreen extends StatelessWidget {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: esInversion ? const Color.fromARGB(255, 217, 91, 186) : const Color.fromARGB(255, 217, 91, 186),
+              backgroundColor: esInversion ? const Color.fromRGBO(240, 98, 146, 1) : const Color.fromRGBO(240, 98, 146, 1),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),

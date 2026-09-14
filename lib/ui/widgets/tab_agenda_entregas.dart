@@ -3,8 +3,22 @@ import 'package:provider/provider.dart';
 import '../../models/venta.dart';
 import '../../providers/inventario_provider.dart';
 
-class TabAgendaEntregas extends StatelessWidget {
+class TabAgendaEntregas extends StatefulWidget {
   const TabAgendaEntregas({super.key});
+
+  @override
+  State<TabAgendaEntregas> createState() => _TabAgendaEntregasState();
+}
+
+class _TabAgendaEntregasState extends State<TabAgendaEntregas> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   // Helper para mostrar la fecha de forma amigable (Ej. "Hoy, 4:00 PM")
   String _formatearFechaAmigable(DateTime? fecha) {
@@ -36,150 +50,203 @@ class TabAgendaEntregas extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<InventarioProvider>(
-      builder: (context, provider, child) {
-        // Obtenemos los carritos y los ordenamos por fecha
-        final listaAgenda = provider.carritosActivos.entries.toList();
-        
-        listaAgenda.sort((a, b) {
-          final fechaA = a.value.fechaEntrega;
-          final fechaB = b.value.fechaEntrega;
-          if (fechaA == null && fechaB == null) return 0;
-          if (fechaA == null) return 1; // Los que no tienen fecha van al final
-          if (fechaB == null) return -1;
-          return fechaA.compareTo(fechaB);
-        });
-
-        if (listaAgenda.isEmpty) {
-          return const Center(
-            child: Text(
-              'No hay entregas pendientes.',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 0,
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Colors.white,
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Buscar por teléfono, nombre o @usuario...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            _searchQuery = '';
+                          });
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                ),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+              },
             ),
-          );
-        }
+          ),
+          Expanded(
+            child: Consumer<InventarioProvider>(
+              builder: (context, provider, child) {
+                final carritos = provider.carritosActivos.entries.toList();
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: listaAgenda.length,
-          itemBuilder: (context, index) {
-            final entry = listaAgenda[index];
-            final identificador = entry.key;
-            final carrito = entry.value;
+                final listaAgenda = carritos.where((entry) {
+                  final cliente = entry.key.toLowerCase();
+                  final lugar = entry.value.lugarEntrega?.toLowerCase() ?? '';
+                  final query = _searchQuery.toLowerCase();
+                  return cliente.contains(query) || lugar.contains(query);
+                }).toList();
+                
+                listaAgenda.sort((a, b) {
+                  final fechaA = a.value.fechaEntrega;
+                  final fechaB = b.value.fechaEntrega;
+                  if (fechaA == null && fechaB == null) return 0;
+                  if (fechaA == null) return 1; // Los que no tienen fecha van al final
+                  if (fechaB == null) return -1;
+                  return fechaA.compareTo(fechaB);
+                });
 
-            // Determinar estado de pago para el badge visual
-            Color colorPago = Colors.red.shade100;
-            Color colorTextoPago = Colors.red.shade800;
-            String textoPago = 'Resta: \$${carrito.saldoPendiente.toStringAsFixed(2)}';
+                if (listaAgenda.isEmpty) {
+                  return Center(
+                    child: Text(
+                      _searchQuery.isEmpty
+                          ? 'No hay entregas pendientes.'
+                          : 'No se encontraron entregas para "$_searchQuery".',
+                      style: const TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  );
+                }
 
-            if (carrito.anticipo >= carrito.total && carrito.total > 0) {
-              colorPago = Colors.green.shade100;
-              colorTextoPago = Colors.green.shade800;
-              textoPago = '¡Liquidado!';
-            } else if (carrito.anticipo > 0) {
-              colorPago = Colors.orange.shade100;
-              colorTextoPago = Colors.orange.shade900;
-              textoPago = 'Abonó: \$${carrito.anticipo.toStringAsFixed(0)} | Resta: \$${carrito.saldoPendiente.toStringAsFixed(0)}';
-            }
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: listaAgenda.length,
+                  itemBuilder: (context, index) {
+                    final entry = listaAgenda[index];
+                    final identificador = entry.key;
+                    final carrito = entry.value;
 
-            return Card(
-              elevation: 2,
-              margin: const EdgeInsets.only(bottom: 12),
-              clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Franja lateral de color
-                    Container(width: 8, color: _colorUrgencia(carrito.fechaEntrega)),
-                    
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    // Determinar estado de pago para el badge visual
+                    Color colorPago = Colors.red.shade100;
+                    Color colorTextoPago = Colors.red.shade800;
+                    String textoPago = 'Resta: \$${carrito.saldoPendiente.toStringAsFixed(2)}';
+
+                    if (carrito.anticipo >= carrito.total && carrito.total > 0) {
+                      colorPago = Colors.green.shade100;
+                      colorTextoPago = Colors.green.shade800;
+                      textoPago = '¡Liquidado!';
+                    } else if (carrito.anticipo > 0) {
+                      colorPago = Colors.orange.shade100;
+                      colorTextoPago = Colors.orange.shade900;
+                      textoPago = 'Abonó: \$${carrito.anticipo.toStringAsFixed(0)} | Resta: \$${carrito.saldoPendiente.toStringAsFixed(0)}';
+                    }
+
+                    return Card(
+                      elevation: 2,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      clipBehavior: Clip.antiAlias,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      child: IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Encabezado: Fecha y Lugar
-                            Row(
-                              children: [
-                                const Icon(Icons.access_time, size: 16, color: Colors.grey),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    _formatearFechaAmigable(carrito.fechaEntrega),
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (carrito.lugarEntrega != null && carrito.lugarEntrega!.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  const Icon(Icons.location_on_outlined, size: 16, color: Colors.grey),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      carrito.lugarEntrega!,
-                                      style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                            // Franja lateral de color
+                            Container(width: 8, color: _colorUrgencia(carrito.fechaEntrega)),
                             
-                            const SizedBox(height: 10),
-                            const Divider(height: 1),
-                            const SizedBox(height: 10),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Encabezado: Fecha y Lugar
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            _formatearFechaAmigable(carrito.fechaEntrega),
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (carrito.lugarEntrega != null && carrito.lugarEntrega!.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.location_on_outlined, size: 16, color: Colors.grey),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              carrito.lugarEntrega!,
+                                              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                    
+                                    const SizedBox(height: 10),
+                                    const Divider(height: 1),
+                                    const SizedBox(height: 10),
 
-                            // Cliente y Badge de Pago
-                            Text(
-                              carrito.telefonoCliente,
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: colorPago,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                textoPago,
-                                style: TextStyle(color: colorTextoPago, fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                            ),
+                                    // Cliente y Badge de Pago
+                                    Text(
+                                      carrito.telefonoCliente,
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: colorPago,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        textoPago,
+                                        style: TextStyle(color: colorTextoPago, fontSize: 12, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
 
-                            const SizedBox(height: 10),
+                                    const SizedBox(height: 10),
 
-                            // Fila de Botones de Acción
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                IconButton(
-                                  tooltip: 'Registrar Anticipo',
-                                  icon: const Icon(Icons.payments_outlined, color: Colors.orange),
-                                  onPressed: () => _dialogoAnticipo(context, provider, identificador, carrito),
+                                    // Fila de Botones de Acción
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        IconButton(
+                                          tooltip: 'Registrar Anticipo',
+                                          icon: const Icon(Icons.payments_outlined, color: Colors.orange),
+                                          onPressed: () => _dialogoAnticipo(context, provider, identificador, carrito),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Agendar / Reagendar',
+                                          icon: const Icon(Icons.edit_calendar, color: Colors.blue),
+                                          onPressed: () => _dialogoAgendar(context, provider, identificador, carrito),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                                IconButton(
-                                  tooltip: 'Agendar / Reagendar',
-                                  icon: const Icon(Icons.edit_calendar, color: Colors.blue),
-                                  onPressed: () => _dialogoAgendar(context, provider, identificador, carrito),
-                                ),
-                              ],
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 

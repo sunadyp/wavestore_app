@@ -14,7 +14,6 @@ part 'extensions/productos_extension.dart';
 part 'extensions/carritos_extension.dart';
 
 class InventarioProvider extends ChangeNotifier {
-  // --- VARIABLES DE ESTADO ---
   List<Producto> _productos = [];
   List<Venta> _ventas = [];
   List<String> _categorias = ['General'];
@@ -31,23 +30,17 @@ class InventarioProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _cacheEstadisticas = [];
   bool _estadisticasDesactualizadas = true;
 
-  // --- GETTERS PRINCIPALES ---
   List<Producto> get productos {
     if (_filtro.isEmpty) return _productos;
-
-    // 1. Limpiamos espacios extra y dividimos lo que el usuario escribió en palabras sueltas
     final terminosBusqueda = _filtro.toLowerCase().trim().split(' ');
-
     return _productos.where((p) {
       final nombreLower = p.nombre.toLowerCase();
-      
-      // 2. Verificamos que CADA palabra que escribiste coincida con el inicio del nombre 
-      // o con el inicio de alguna palabra dentro del nombre (que haya un espacio antes)
       return terminosBusqueda.every((termino) => 
         nombreLower.startsWith(termino) || nombreLower.contains(' $termino')
       );
     }).toList();
   }
+  
   List<Venta> get ventas => _ventas;
   List<String> get categorias => _categorias;
   List<Movimiento> get movimientos => _movimientos; 
@@ -55,9 +48,13 @@ class InventarioProvider extends ChangeNotifier {
   double get dineroEnCaja => _dineroEnCaja;
   Map<String, Carrito> get carritosActivos => _carritosActivos;
 
-  // --- CONSTRUCTOR Y CARGA INICIAL ---
   InventarioProvider() {
     _cargarDesdeDisco();
+  }
+
+  // 🚀 NUEVO: Método público para recargar tras importar un Backup
+  Future<void> recargarDatos() async {
+    await _cargarDesdeDisco();
   }
 
   Future<void> _cargarDesdeDisco() async {

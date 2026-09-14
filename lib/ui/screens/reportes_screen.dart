@@ -1,11 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:file_picker/file_picker.dart';
+
 import '../../providers/inventario_provider.dart';
+import '../../services/backup_service.dart';
 import '../widgets/tarjeta_financiera.dart';
 import '../widgets/lista_historial_ventas.dart';
-import '../widgets/lista_historial_movimientos.dart'; // <-- NUEVA IMPORTACIÓN
+import '../widgets/lista_historial_movimientos.dart';
 
 class ReportesScreen extends StatefulWidget {
   const ReportesScreen({super.key});
@@ -126,7 +130,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
-                onTap: () => _mostrarDesgloseMes(context, provider, fecha, mesFormateado), // <-- Actualizado
+                onTap: () => _mostrarDesgloseMes(context, provider, fecha, mesFormateado),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -261,21 +265,99 @@ class _ReportesScreenState extends State<ReportesScreen> {
               ),
             ),
           )),
+
+        // ---------------------------------------------------------
+        // SECCIÓN DE BACKUP
+        // ---------------------------------------------------------
+        const SizedBox(height: 40),
+        const Divider(),
+        const SizedBox(height: 16),
+        const Text(
+          'Copias de Seguridad', 
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+        ),
+        const SizedBox(height: 16),
+        
+        ElevatedButton.icon(
+          icon: const Icon(Icons.download),
+          label: const Text('Exportar Respaldo'),
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 50),
+            backgroundColor: Colors.blueGrey,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          onPressed: () async {
+            bool exito = await BackupService.exportarRespaldo();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(exito ? 'Respaldo exportado correctamente' : 'Error al exportar'),
+                  backgroundColor: exito ? Colors.green : Colors.red,
+                ),
+              );
+            }
+          },
+        ),
+        
+        const SizedBox(height: 12),
+        
+        OutlinedButton.icon(
+          icon: const Icon(Icons.restore),
+          label: const Text('Importar datos previos'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 50),
+            foregroundColor: Colors.red.shade700,
+            side: BorderSide(color: Colors.red.shade300, width: 1.5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          onPressed: () async {
+            // NUEVA SINTAXIS PARA FILE PICKER (Versión 12 y 13+)
+            PlatformFile? file = await FilePicker.pickFile(
+              type: FileType.custom,
+              allowedExtensions: ['json'],
+            );
+
+            if (file != null && file.path != null) {
+              File localFile = File(file.path!);
+              String contents = await localFile.readAsString();
+              
+              bool exito = await BackupService.restaurarRespaldo(contents);
+              
+              if (exito && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Datos restaurados correctamente'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                
+                // Asegúrate de recargar aquí el Provider
+                provider.recargarDatos();
+              } else if (context.mounted) {
+                 ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Error al restaurar. Verifica el archivo.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            }
+          },
+        ),
+        const SizedBox(height: 32),
       ],
     );
   }
 
-  // <-- ACTUALIZADO: Ahora extrae ventas y gastos, y muestra pestañas
   void _mostrarDesgloseMes(BuildContext context, InventarioProvider provider, DateTime mesSeleccionado, String nombreMes) {
     final inicioMes = DateTime(mesSeleccionado.year, mesSeleccionado.month, 1);
     final finMes = DateTime(mesSeleccionado.year, mesSeleccionado.month + 1, 0); 
     final finDelDiaMes = DateTime(finMes.year, finMes.month, finMes.day, 23, 59, 59);
 
-    // Filtrar ventas
     final ventasDelMes = provider.obtenerVentasPorRango(inicioMes, finMes);
     ventasDelMes.sort((a, b) => b.fecha.compareTo(a.fecha));
 
-    // Filtrar gastos/inversiones
     final movimientosDelMes = provider.movimientos.where((m) {
       return m.fecha.isAfter(inicioMes.subtract(const Duration(seconds: 1))) &&
              m.fecha.isBefore(finDelDiaMes);
@@ -396,7 +478,7 @@ class _InsightCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorFondo,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colorIcono.withOpacity(0.3), width: 1),
+        border: Border.all(color: colorIcono.withValues(alpha: 0.3), width: 1),
       ),
       child: Row(
         children: [
@@ -406,7 +488,7 @@ class _InsightCard extends StatelessWidget {
               color: Colors.white,
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(color: colorIcono.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4)),
+                BoxShadow(color: colorIcono.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4)),
               ],
             ),
             child: Icon(icono, color: colorIcono, size: 28),

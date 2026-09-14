@@ -5,7 +5,7 @@ import '../../models/producto.dart';
 import '../../utils/ui_utils.dart';
 import 'formulario_producto.dart';
 import 'modal_transferencia.dart'; 
-import 'modal_salida_stock.dart'; // 🚀 NUEVO IMPORT
+import 'modal_salida_stock.dart';
 
 class ItemProducto extends StatelessWidget {
   final Producto producto;
@@ -25,9 +25,12 @@ class ItemProducto extends StatelessWidget {
       key: Key(producto.id),
       direction: DismissDirection.endToStart,
       confirmDismiss: (_) => UIUtils.confirmarEliminacion(context, producto.nombre),
-      onDismissed: (_) {
-        context.read<InventarioProvider>().eliminarProducto(producto.id);
-        _notificar(context, '${producto.nombre} eliminado');
+      onDismissed: (_) async {
+        // Añadimos await aquí para asegurar el borrado en disco
+        await context.read<InventarioProvider>().eliminarProducto(producto.id);
+        // Nota: Al hacer dismiss el widget se destruye, por lo que el context podría
+        // no estar montado, pero dejamos el aviso por seguridad si aún existe.
+        // No usamos _notificar(context) directo sin comprobar.
       },
       background: _buildDeleteBackground(),
       child: Card(
@@ -36,7 +39,7 @@ class ItemProducto extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(15),
           side: BorderSide(
-            color: esConceptStore ? Colors.purple.withOpacity(0.3) : Colors.transparent, 
+            color: esConceptStore ? Colors.purple.withValues(alpha: 0.3) : Colors.transparent, 
             width: 1
           ),
         ),
@@ -125,13 +128,13 @@ class ItemProducto extends StatelessWidget {
                             color: Theme.of(context)
                                 .colorScheme
                                 .primary
-                                .withOpacity(0.1),
+                                .withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
                               color: Theme.of(context)
                                   .colorScheme
                                   .primary
-                                  .withOpacity(0.3),
+                                  .withValues(alpha: 0.3),
                             ),
                           ),
                           child: Text(
@@ -237,7 +240,6 @@ class ItemProducto extends StatelessWidget {
     );
   }
 
-  // 🚀 MÉTODO PARA ABRIR EL MODAL DE SALIDA DE STOCK
   void _abrirSalidaStock(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -260,8 +262,10 @@ class ItemProducto extends StatelessWidget {
       final int qty = resultado['cantidad'];
       
       if (qty > 0 && qty <= stockDisponible) {
-        final error = provider.agregarAlCarrito(telefono, producto, qty, origenConcept: esConceptStore);
+        final error = await provider.agregarAlCarrito(telefono, producto, qty, origenConcept: esConceptStore);
         
+        if (!context.mounted) return;
+
         if (error == null) {
           _notificar(context, '$qty agregados al carrito de $telefono');
         } else {
@@ -311,7 +315,7 @@ class ItemProducto extends StatelessWidget {
                     title: const Text('Restar de la caja', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                     subtitle: const Text('Apágalo si es mercancía vieja o regalada.', style: TextStyle(fontSize: 12)),
                     value: afectaCaja,
-                    activeColor: Theme.of(context).colorScheme.primary,
+                    activeThumbColor: Theme.of(context).colorScheme.primary,
                     onChanged: (val) => setState(() => afectaCaja = val),
                   ),
                 ],
@@ -340,7 +344,10 @@ class ItemProducto extends StatelessWidget {
       final double costo = resultado['costo'];
       final bool afecta = resultado['afectaCaja'];
       
-      context.read<InventarioProvider>().reabastecerProducto(producto.id, qty, costo, afectaCaja: afecta);
+      // AÑADIDO: el await necesario y la verificación del mounted
+      await context.read<InventarioProvider>().reabastecerProducto(producto.id, qty, costo, afectaCaja: afecta);
+      
+      if (!context.mounted) return;
       _notificar(context, 'Stock actualizado exitosamente');
     }
   }
